@@ -1,0 +1,30 @@
+# rwa-liquidity-agent (working name)
+
+A neutral AI agent for US users who need cash. It compares every way to turn a home or a
+luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
+to the next step (including tokenization on Solana) only after explicit approval.
+
+> Status: project scaffold (milestone M0). The agent is not built yet.
+>
+> Not investment or financial advice.
+
+## Run locally
+
+Requires Node.js 20.9 or later.
+
+```bash
+npm install
+cp .env.example .env.local   # fill in keys only when a milestone needs them
+npm run dev                  # then open http://localhost:3000
+```
+
+## Checks
+
+```bash
+npm run lint    # ESLint
+npm run build   # production build, includes the TypeScript type check
+```
+
+## Third-party code
+
+See [THIRD_PARTY.md](THIRD_PARTY.md).

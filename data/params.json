@@ -1,0 +1,142 @@
+{
+  "registry_version": "2026-10-01.2",
+  "created_at": "2026-10-01T16:30:00+09:00",
+  "status": "initial_import_needs_owner_review",
+  "changelog": [
+    {"version": "2026-10-01.1", "note": "Initial import."},
+    {"version": "2026-10-01.2", "note": "Added checked_at to every parameter; product values now age from checked_at instead of as_of. Clarified the watch_full_kit_uplift source note. No values changed."}
+  ],
+  "rules": {
+    "kinds": {
+      "market": "Changes often. Refreshed automatically by script; never edited by the LLM.",
+      "product": "Partner terms. A weekly checker may PROPOSE a change; a human must approve before it is used.",
+      "design": "Our own choices. Changed only by the owner, with a version bump and a reason.",
+      "reference": "Context for explanations only. Never used in a calculation."
+    },
+    "dates": "as_of = the date the value refers to: the observation or release date for market values; the source's own publication date for product and reference values, or the day we read it when the source shows no date. checked_at = the day we last confirmed the value at its source (null = not confirmed yet).",
+    "staleness": "A value used by a calculation is stale when its age is greater than valid_days. Age counts from as_of for market values (the data itself gets old) and from checked_at for product values (a term stays current until the partner changes it; a null checked_at counts as stale). Design values never go stale and reference values never block. If any value used by a calculation is stale, the agent must not finalize a recommendation and must show 'needs fresh data'.",
+    "receipt": "Every recommendation records registry_version so the result can be reproduced later."
+  },
+  "params": {
+    "mortgage_30y_fixed_avg": {
+      "value": 0.0703, "unit": "rate/yr", "kind": "market",
+      "source": "Freddie Mac PMMS (published Thursdays 12pm ET; history downloadable as .xlsx)",
+      "source_url": "https://www.globenewswire.com/news-release/2026/09/24/3368592/0/en/mortgage-rates-average-7-03.html",
+      "as_of": "2026-09-24", "checked_at": null, "valid_days": 7
+    },
+    "mortgage_15y_fixed_avg": {
+      "value": 0.0642, "unit": "rate/yr", "kind": "market",
+      "source": "Freddie Mac PMMS",
+      "source_url": "https://www.globenewswire.com/news-release/2026/09/24/3368592/0/en/mortgage-rates-average-7-03.html",
+      "as_of": "2026-09-24", "checked_at": null, "valid_days": 7
+    },
+    "heloc_avg_rate": {
+      "value": 0.0709, "unit": "rate/yr (variable)", "kind": "market",
+      "source": "Curinos via Yahoo Finance; applies to credit score >= 780 and CLTV < 70%. No public API verified: entered manually weekly.",
+      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-september-25-2026-understanding-how-equity-rates-work-matters-100000210.html",
+      "as_of": "2026-09-25", "checked_at": null, "valid_days": 7
+    },
+    "home_equity_loan_avg_rate": {
+      "value": 0.0742, "unit": "rate/yr (fixed)", "kind": "market",
+      "source": "Curinos via Yahoo Finance; same conditions as heloc_avg_rate",
+      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-september-25-2026-understanding-how-equity-rates-work-matters-100000210.html",
+      "as_of": "2026-09-25", "checked_at": null, "valid_days": 7
+    },
+    "sofr": {
+      "value": 0.0390, "unit": "rate/yr", "kind": "market",
+      "source": "FRED series SOFR (API: fred/series/observations, JSON, API key)",
+      "source_url": "https://fred.stlouisfed.org/series/SOFR",
+      "as_of": "2026-09-28", "checked_at": null, "valid_days": 3
+    },
+    "hei_investor_discount": {
+      "value": 0.333333, "unit": "fraction", "kind": "design",
+      "source": "Calibrated from Hometap X-for-Y example: 10% cash for a 15% share of future value (years 0-3) => 1 - 10/15",
+      "source_url": "https://www.hometap.com/blog/how-hometap-pricing-works",
+      "as_of": "2024-09-30", "checked_at": null, "valid_days": null
+    },
+    "hei_fee_rate": {
+      "value": 0.039, "unit": "fraction of gross investment", "kind": "product",
+      "source": "Point HEI processing fee: up to 3.9%, minimum $2,000 (plus third-party closing costs)",
+      "source_url": "https://point.com/hei",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "hei_fee_min_usd": {
+      "value": 2000, "unit": "USD", "kind": "product",
+      "source": "Point HEI processing fee minimum",
+      "source_url": "https://point.com/hei",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "hei_max_investment_pct_of_value": {
+      "value": 0.2499, "unit": "fraction of home value", "kind": "product",
+      "source": "Hometap maximum: 24.99% of home value (used as our eligibility cap)",
+      "source_url": "https://www.hometap.com/blog/how-hometap-pricing-works",
+      "as_of": "2024-09-30", "checked_at": null, "valid_days": 30
+    },
+    "hei_investor_return_cap": {
+      "value": 0.20, "unit": "annualized on investor capital", "kind": "design",
+      "source": "Owner decision 2026-10-01 (Point also uses time-based caps)",
+      "source_url": "https://point.com/hei",
+      "as_of": "2026-10-01", "checked_at": null, "valid_days": null
+    },
+    "hei_term_years": {
+      "value": {"default": 10, "min": 5, "max": 30}, "unit": "years", "kind": "design",
+      "source": "Owner decision 2026-10-01 (Hometap up to 10 years; Point up to 30 years)",
+      "source_url": "https://www.hometap.com/how-it-works",
+      "as_of": "2026-10-01", "checked_at": null, "valid_days": null
+    },
+    "heloc_first_threshold_years": {
+      "value": 3, "unit": "years", "kind": "design",
+      "source": "Owner decision 2026-10-01: if repayment is planned within this horizon, show HELOC/home equity loan first",
+      "source_url": null,
+      "as_of": "2026-10-01", "checked_at": null, "valid_days": null
+    },
+    "reverse_mortgage_min_age": {
+      "value": 62, "unit": "years", "kind": "product",
+      "source": "CFPB: HECM reverse mortgage is only for homeowners 62 and older",
+      "source_url": "https://www.consumerfinance.gov/ask-cfpb/what-is-a-reverse-mortgage-en-224/",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 365
+    },
+    "watch_dealer_offer_range": {
+      "value": {"low": 0.70, "high": 0.90}, "unit": "fraction of market value", "kind": "product",
+      "source": "Dealer guide (2026): dealers pay roughly 10-30% less than market value; same day locally, next day if shipped",
+      "source_url": "https://nwtimepieces.com/blogs/resources/where-to-sell-your-rolex",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "chrono24_private_seller_fee": {
+      "value": 0.065, "unit": "fraction of sale price", "kind": "product",
+      "source": "Chrono24 FAQ: 6.5% commission after sale; listing free; escrow checkout",
+      "source_url": "https://www.chrono24.com/info/faqs.htm",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "watch_loan_ltv": {
+      "value": {"sport_steel": 0.75, "dress_gold": 0.70, "specialty_vintage": 0.65}, "unit": "fraction of appraised value", "kind": "product",
+      "source": "Borro guide (lender self-reported, 2026-03-19): LTV 60-80%; terms 30-180 days; lender holds the watch; rates not disclosed",
+      "source_url": "https://borro.com/rolex-collateral-loan-national-guide/",
+      "as_of": "2026-03-19", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "watch_loan_term_days": {
+      "value": {"min": 30, "max": 180}, "unit": "days", "kind": "product",
+      "source": "Borro guide (2026-03-19); extensions common",
+      "source_url": "https://borro.com/rolex-collateral-loan-national-guide/",
+      "as_of": "2026-03-19", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "watch_full_kit_uplift": {
+      "value": {"low": 0.10, "high": 0.15}, "unit": "fraction of value", "kind": "reference",
+      "source": "Borro guide: full kit (box, outer box, papers, hangtags) adds 10-15% for most steel sport references; papers alone roughly half that",
+      "source_url": "https://borro.com/rolex-collateral-loan-national-guide/",
+      "as_of": "2026-03-19", "checked_at": "2026-10-01", "valid_days": 30
+    },
+    "avm_median_error": {
+      "value": {"on_market": 0.019, "off_market": 0.075}, "unit": "median absolute error", "kind": "reference",
+      "source": "Zillow figures as quoted by a third-party article (date not stated)",
+      "source_url": "https://houwzer.com/blog/the-zillow-zestimate-can-it-be-trusted/",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 90
+    },
+    "rentcast_free_requests_per_month": {
+      "value": 50, "unit": "requests/month", "kind": "reference",
+      "source": "RentCast API Developer plan (free); overage $0.20/request",
+      "source_url": "https://www.rentcast.io/api",
+      "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 30
+    }
+  }
+}
