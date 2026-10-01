@@ -109,15 +109,15 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 ```
 /app                      Next.js App Router (landing chat, /case/[id], /token/[mint], /settle/[id])
 /components               Chat, CameraCapture, PathTable, TermSheet, PassportView, ReceiptBadge, SimulatedTag
-/lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), types.ts
+/lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, photos.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), types.ts
 /lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
 /lib/chain                adapter.ts, solana.ts, mock.ts
-/lib/integrations         rentcast.ts (live + demo source + cache), rentcastCache.ts (disk cache), plaid.ts (Liabilities, sandbox; approval-gated tool), vision.ts, watchRegister.mock.ts
-/lib/assets               types.ts (assets, PII items), ownerMatch.ts
+/lib/integrations         rentcast.ts (live + demo source + cache), rentcastCache.ts (disk cache), plaid.ts (Liabilities, sandbox; approval-gated tool), vision.ts (Gemini image + JSON output), watchRegister.mock.ts (simulated, approval-gated)
+/lib/assets               types.ts (assets, PII items, photos), ownerMatch.ts, serial.ts (salted serial hash), watchPrices.ts
 /lib/format.ts            display formatting (formatUsd): tools return finished text, the model quotes it
 /data/params.json         parameter registry (source of truth for every number)
-/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape
+/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape; watch-prices.json = made-up demo price table
 /scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS), check-params.ts, check-product-terms.ts (propose only)
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
 THIRD_PARTY.md, .env.example
@@ -196,9 +196,13 @@ type RealEstateAsset = { id: string; kind: 'real_estate'; addressRef: string; //
   ownerMatch?: 'match' | 'partial' | 'no_match' | 'unknown'; ownerOccupied?: boolean;
   lastSale?: { date: string; priceUsd: number };
   mortgageBalanceUsd?: number; mortgageSource?: 'user_stated' | 'plaid'; interiorNotes?: string };
-type WatchAsset = { id: string; kind: 'watch'; model?: string; reference?: string; serialHash?: string;
-  hasBox?: boolean; hasPapers?: boolean; category: 'sport_steel' | 'dress_gold' | 'specialty_vintage';
-  marketValue?: { usd: number; source: string; asOf: string }; theftCheck: 'not_checked' | 'clear' | 'flagged' | 'simulated_clear' };
+type WatchAsset = { id: string; kind: 'watch'; maker?: string; model?: string; reference?: string;
+  serialRef?: string; // key into CaseFile.pii (raw serial + salt)
+  serialHash?: string; // HMAC-SHA256(per-case salt, normalized serial): safe to publish, cannot be reversed by trying serials
+  hasBox?: boolean; hasPapers?: boolean; // undefined = not shown / not asked yet
+  category: 'sport_steel' | 'dress_gold' | 'specialty_vintage' | null; // null until code or the user settles it
+  marketValue?: { usd: number; source: string; asOf: string }; theftCheck: 'not_checked' | 'clear' | 'flagged' | 'simulated_clear';
+  photoIds: string[] };
 type PathOption = { id: string; lane: 'real_estate' | 'watch' | 'cross'; label: string; cashNowUsd: number;
   totalCostUsd?: number; effectiveAnnualCost?: number; monthlyPaymentUsd?: number; keepsAsset: boolean;
   timeToCash: string; risks: string[] };
@@ -239,7 +243,7 @@ Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vit
 | `npm run test:watch` | Unit tests in watch mode |
 | `npm run params:check` | Freshness of every registry value today (or `-- YYYY-MM-DD`) |
 | `npm run params:refresh` | Update market values from FRED (needs `FRED_API_KEY` in `.env.local`; `-- --dry-run` to preview) |
-| `npm run agent:chat` | Chat with the agent in the terminal (Gemini; `-- "msg1" "msg2"` replays messages). Uses RentCast when `RENTCAST_API_KEY` is set (cached 30 days in git-ignored `.cache/rentcast/`), otherwise or with `PROPERTY_DATA_SOURCE=demo` the demo homes in `data/demo/properties.json`. With `PLAID_CLIENT_ID` + `PLAID_SECRET` it can also read a sandbox mortgage after you approve. Made-up personas for demos |
+| `npm run agent:chat` | Chat with the agent in the terminal (Gemini; `-- "msg1" "msg2"` replays messages). `/photo <path>` uploads a watch photo. Uses RentCast when `RENTCAST_API_KEY` is set (cached 30 days in git-ignored `.cache/rentcast/`), otherwise or with `PROPERTY_DATA_SOURCE=demo` the demo homes in `data/demo/properties.json`. With `PLAID_CLIENT_ID` + `PLAID_SECRET` it can also read a sandbox mortgage after you approve. Made-up personas for demos |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |

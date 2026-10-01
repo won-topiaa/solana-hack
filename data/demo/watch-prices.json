@@ -1,0 +1,9 @@
+{
+  "note": "Made-up watches and prices for demos and tests (the CLAUDE.md §8.5 watch example). Not market data. A real watch price source is still TBD.",
+  "source": "Demo price table (made up)",
+  "asOf": "2026-10-02",
+  "watches": [
+    { "maker": "Demo Watch Co.", "model": "Demo Diver 300", "reference": "DEMO-300", "category": "sport_steel", "priceUsd": 25000 },
+    { "maker": "Demo Watch Co.", "model": "Demo Dress 38 Gold", "reference": "DEMO-38G", "category": "dress_gold", "priceUsd": 15000 }
+  ]
+}

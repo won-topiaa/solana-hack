@@ -85,7 +85,7 @@ describe("home lookup (M4 done-when: address -> AVM range + owner match on demo 
       say("A person will check the title documents."),
     ]);
     const turn = await sendUserMessage(caseInCapture(), "88 Sample Court", { llm, tools, now });
-    expect(turn.caseFile.assets[0].ownerMatch).toBe("partial");
+    expect(turn.caseFile.assets[0]).toMatchObject({ kind: "real_estate", ownerMatch: "partial" });
   });
 
   it("adds nothing when the address is not found", async () => {

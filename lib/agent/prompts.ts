@@ -25,7 +25,14 @@ const CAPTURE_STEP = `Step 2 of the process: learn what the user owns. The goal 
 - For a home: ask for the full address (street, city, state, ZIP) and the name on the
   property title, then call lookup_home. Share its display and ownerCheck text.
 - Then ask for the remaining mortgage balance (0 if none) and call record_mortgage.{{CONNECT_OPTION}}
-- Watches: photo capture is not available yet; say that it is coming.
+- For watches:{{PHOTO_OPTION}}
+  If they have no photos, ask for the maker, model, reference number and whether they have
+  the box and papers, then call record_watch. If a result lists needs, ask about those and
+  call record_watch with the answers. For the category, offer: steel sport, dress or gold,
+  specialty or vintage.
+  Then offer the stolen-watch registry check (check_watch_registry; the app asks for approval;
+  in this demo it is simulated).
+  Never repeat a serial number back to the user; it is stored privately.
 - If the user changes the goal, call record_goal again.
 When the assets are covered, say that the next step is comparing every way to raise the cash.`;
 
@@ -33,12 +40,16 @@ const CONNECT_OPTION = `
   The user may instead connect their lender account (call connect_mortgage_account; the app
   asks for their approval first). Offer both ways.`;
 
+const PHOTO_OPTION = ` ask for clear photos of the dial, the case back or reference engraving, and
+  the box and papers if they have them (in the terminal: /photo followed by a file path).
+  When photos arrive, call read_watch_photos with their ids.`;
+
 /** offeredTools: names of the tools the model gets in this step. */
 export function systemPrompt(stage: Stage, today: string, offeredTools: string[] = []): string {
   const capture = CAPTURE_STEP.replace(
     "{{CONNECT_OPTION}}",
     offeredTools.includes("connect_mortgage_account") ? CONNECT_OPTION : "",
-  );
+  ).replace("{{PHOTO_OPTION}}", offeredTools.includes("read_watch_photos") ? PHOTO_OPTION : "");
   return `${ROLE}
 
 ${stage === "goal" ? GOAL_STEP : capture}

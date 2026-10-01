@@ -5,7 +5,7 @@ with its license. Versions and licenses below are read from the installed packag
 (`node_modules/<name>/package.json`). The full dependency tree, including transitive
 packages, is pinned in `package-lock.json`.
 
-Last updated: 2026-10-01 (milestone M4).
+Last updated: 2026-10-02 (milestone M5).
 
 ## Runtime dependencies
 
@@ -63,8 +63,12 @@ owners' own terms above allow use with attribution. Re-check before a public lau
 |---|---|---|---|
 | RentCast API | Home records (owner check, last sale) and value range. Without a key, or with `PROPERTY_DATA_SOURCE=demo`, made-up demo data in `data/demo/properties.json` | https://www.rentcast.io/terms-api | Storing and showing the data to users is allowed; no attribution required. Free plan: 50 requests a month, so lookups are cached for 30 days in the git-ignored `.cache/rentcast/`. |
 | Plaid Liabilities (sandbox) | Reading a mortgage's balance and terms from the lender, after the user approves | https://plaid.com/legal/ | Sandbox only: test data from Plaid's test institutions. The access token is used once and not stored. Production would use Plaid Link in the browser. |
-| Google Gemini API | The agent's conversation and tool calling (later: reading photos) | https://ai.google.dev/gemini-api/terms | Users must be 18+. Our key is on the paid tier: Google does not use prompts to improve its products and keeps them only for a limited time to detect abuse. |
+| Google Gemini API | The agent's conversation and tool calling, and reading watch photos (image input, JSON output) | https://ai.google.dev/gemini-api/terms | Users must be 18+. Our key is on the paid tier: Google does not use prompts to improve its products and keeps them only for a limited time to detect abuse. |
+
+| The Watch Register (stolen-watch registry) | Not contacted. The check is simulated and labeled "SIMULATED" (no API could be verified) | — | — |
 
 ## Images, logos and other media
 
-None.
+| File | Origin |
+|---|---|
+| `data/demo/watch-photos/demo-warranty-card.png` | Made for this project: rendered from `demo-warranty-card.svg` (our own file) with macOS Quick Look. Made-up maker, reference and serial; no logos. |

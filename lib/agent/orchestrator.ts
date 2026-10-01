@@ -24,6 +24,7 @@ export function createCaseFile(id: string, now: Date = new Date()): CaseFile {
     stage: "goal",
     assets: [],
     pii: {},
+    photos: {},
     messages: [],
     pendingApproval: null,
     events: [],

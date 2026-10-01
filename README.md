@@ -4,7 +4,7 @@ A neutral AI agent for US users who need cash. It compares every way to turn a h
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
 to the next step (including tokenization on Solana) only after explicit approval.
 
-> Status: in development (milestone M4: in a terminal chat the agent takes the cash goal, looks up a home's value range and owner check, and records the mortgage balance).
+> Status: in development (milestone M5: in a terminal chat the agent takes the cash goal, looks up a home and its mortgage, and reads watch photos).
 >
 > Not investment or financial advice.
 
@@ -25,6 +25,10 @@ Needs `GEMINI_API_KEY` in `.env.local` (paid tier). Use made-up personas in demo
 ```bash
 npm run agent:chat
 ```
+
+To add a watch photo during the chat, type `/photo path/to/photo.jpg`. Try the made-up warranty card:
+`/photo data/demo/watch-photos/demo-warranty-card.png`. The demo price table in
+`data/demo/watch-prices.json` knows the made-up references `DEMO-300` and `DEMO-38G`.
 
 ## Checks
 
