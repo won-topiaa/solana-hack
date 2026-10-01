@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createCaseFile, MAX_MODEL_CALLS_PER_TURN, resolveApproval, sendUserMessage } from "./orchestrator";
 import { createScriptedLlm } from "./scripted";
-import { AGENT_TOOLS, type AgentTool } from "./tools";
+import { createDemoPropertySource } from "../integrations/rentcast";
+import { createAgentTools, type AgentTool } from "./tools";
 import type { LlmReply } from "./llm";
+
+const TOOLS = createAgentTools({ propertySource: createDemoPropertySource() });
 
 // 2026-10-01 15:00 UTC is 11:00 on 2026-10-01 in New York.
 const now = () => new Date("2026-10-01T15:00:00Z");
@@ -26,7 +29,7 @@ describe("goal intake (M3 done-when: a scripted conversation produces a Goal)", 
       }),
       say("Saved: $30,000 by October 9, keeping your steel sport watch. Next, tell me about your assets."),
     ]);
-    const deps = { llm, tools: AGENT_TOOLS, now };
+    const deps = { llm, tools: TOOLS, now };
 
     const first = await sendUserMessage(createCaseFile("case-1", now()), "Hi, I need some cash.", deps);
     expect(first.reply).toContain("How much cash");
@@ -55,7 +58,7 @@ describe("goal intake (M3 done-when: a scripted conversation produces a Goal)", 
 
   it("gives the model today's date and the tool list", async () => {
     const llm = createScriptedLlm([say("Hello")]);
-    await sendUserMessage(createCaseFile("case-2", now()), "Hi", { llm, tools: AGENT_TOOLS, now });
+    await sendUserMessage(createCaseFile("case-2", now()), "Hi", { llm, tools: TOOLS, now });
     expect(llm.requests[0].system).toContain("Today is 2026-10-01");
     expect(llm.requests[0].tools.map((tool) => tool.name)).toEqual(["record_goal"]);
   });
@@ -67,7 +70,7 @@ describe("goal intake (M3 done-when: a scripted conversation produces a Goal)", 
     ]);
     const turn = await sendUserMessage(createCaseFile("case-3", now()), "$30,000 by September 1", {
       llm,
-      tools: AGENT_TOOLS,
+      tools: TOOLS,
       now,
     });
     expect(turn.caseFile.goal).toBeUndefined();
@@ -84,6 +87,7 @@ describe("approval gates", () => {
   function gatedTool(ran: unknown[]): AgentTool {
     return {
       declaration: { name: "record_receipt", description: "test tool", parameters: { type: "object", properties: {} } },
+      stages: ["goal"],
       requiresApproval: true,
       describeForApproval: () => "Write the recommendation receipt to Solana devnet",
       run: (args, { caseFile }) => {
@@ -128,7 +132,7 @@ describe("approval gates", () => {
 describe("safety limits", () => {
   it("answers an unknown tool with an error instead of crashing", async () => {
     const llm = createScriptedLlm([callTool("transfer_funds", {}), say("I cannot do that.")]);
-    const turn = await sendUserMessage(createCaseFile("case-6", now()), "Send money", { llm, tools: AGENT_TOOLS, now });
+    const turn = await sendUserMessage(createCaseFile("case-6", now()), "Send money", { llm, tools: TOOLS, now });
     expect(turn.reply).toBe("I cannot do that.");
     expect(llm.requests.at(-1)?.messages.at(-1)).toMatchObject({
       results: [{ output: { error: "Unknown tool: transfer_funds" } }],
@@ -141,7 +145,7 @@ describe("safety limits", () => {
     );
     const llm = createScriptedLlm(loop);
     await expect(
-      sendUserMessage(createCaseFile("case-7", now()), "Hi", { llm, tools: AGENT_TOOLS, now }),
+      sendUserMessage(createCaseFile("case-7", now()), "Hi", { llm, tools: TOOLS, now }),
     ).rejects.toThrow(/without answering/);
   });
 });

@@ -1,0 +1,31 @@
+{
+  "note": "Made-up addresses and people for demos and tests. Not real records. Shapes follow RentCast GET /v1/properties (one array item) and GET /v1/avm/value.",
+  "properties": [
+    {
+      "address": "742 Demo Lane, Exampleville, CA 99999",
+      "record": {
+        "id": "demo-742-demo-lane",
+        "formattedAddress": "742 Demo Lane, Exampleville, CA 99999",
+        "propertyType": "Single Family",
+        "lastSaleDate": "2015-06-12T00:00:00.000Z",
+        "lastSalePrice": 610000,
+        "ownerOccupied": true,
+        "owner": { "names": ["Jordan Sample"], "type": "Individual" }
+      },
+      "valueEstimate": { "price": 1000000, "priceRangeLow": 930000, "priceRangeHigh": 1070000 }
+    },
+    {
+      "address": "88 Sample Court, Exampleville, CA 99999",
+      "record": {
+        "id": "demo-88-sample-court",
+        "formattedAddress": "88 Sample Court, Exampleville, CA 99999",
+        "propertyType": "Condo",
+        "lastSaleDate": "2021-03-05T00:00:00.000Z",
+        "lastSalePrice": 455000,
+        "ownerOccupied": false,
+        "owner": { "names": ["SAMPLE HOLDINGS LLC"], "type": "Organization" }
+      },
+      "valueEstimate": { "price": 520000, "priceRangeLow": 480000, "priceRangeHigh": 560000 }
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 // Shared shapes for the agent: the user's goal, the case file (everything the
 // agent knows about one user's case) and the messages exchanged with the model.
 
+import type { Asset, PiiItem } from "../assets/types";
+
 /** CLAUDE.md §9. keepAssetIds is filled once assets are captured (step 2). */
 export type Goal = {
   cashNeededUsd: number;
@@ -53,6 +55,8 @@ export type CaseFile = {
   createdAt: string;
   stage: Stage;
   goal?: Goal;
+  assets: Asset[];
+  pii: Record<string, PiiItem>; // personal data, referenced by key from assets; never logged
   messages: AgentMessage[];
   pendingApproval: PendingApproval | null;
   events: CaseEvent[];

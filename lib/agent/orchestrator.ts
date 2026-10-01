@@ -18,7 +18,16 @@ export type AgentDeps = { llm: LlmClient; tools: AgentTool[]; now?: () => Date }
 export type TurnResult = { caseFile: CaseFile; reply: string; awaitingApproval: PendingApproval | null };
 
 export function createCaseFile(id: string, now: Date = new Date()): CaseFile {
-  return { id, createdAt: now.toISOString(), stage: "goal", messages: [], pendingApproval: null, events: [] };
+  return {
+    id,
+    createdAt: now.toISOString(),
+    stage: "goal",
+    assets: [],
+    pii: {},
+    messages: [],
+    pendingApproval: null,
+    events: [],
+  };
 }
 
 function currentTime(deps: AgentDeps): Date {
@@ -76,10 +85,12 @@ async function runModelLoop(start: CaseFile, deps: AgentDeps): Promise<TurnResul
   let file = start;
   for (let round = 0; round < MAX_MODEL_CALLS_PER_TURN; round += 1) {
     const today = todayInNewYork(currentTime(deps));
+    // Each step offers only its own tools, so the model cannot skip ahead.
+    const offered = deps.tools.filter((tool) => tool.stages.includes(file.stage)).map((tool) => tool.declaration);
     const reply = await deps.llm.generate({
-      system: systemPrompt(today),
+      system: systemPrompt(file.stage, today, offered.map((tool) => tool.name)),
       messages: file.messages,
-      tools: deps.tools.map((tool) => tool.declaration),
+      tools: offered,
     });
     const toolCalls: ToolCall[] = reply.toolCalls.map((call, index) => ({
       id: `m${file.messages.length}-c${index}`,
@@ -116,6 +127,8 @@ async function runToolCalls(
     const tool = deps.tools.find((candidate) => candidate.declaration.name === call.name);
     if (!tool) {
       results.push(resultFor(call, { error: `Unknown tool: ${call.name}` }));
+    } else if (!tool.stages.includes(file.stage)) {
+      results.push(resultFor(call, { error: `${call.name} is not available at this step` }));
     } else if (tool.requiresApproval && pending) {
       // Keep it simple for the user: one decision at a time.
       results.push(resultFor(call, { error: "Only one action can wait for approval at a time. Ask again later." }));

@@ -113,9 +113,11 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
 /lib/chain                adapter.ts, solana.ts, mock.ts
-/lib/integrations         rentcast.ts, plaid.ts, vision.ts, watchRegister.mock.ts
+/lib/integrations         rentcast.ts (live + demo source + cache), rentcastCache.ts (disk cache), plaid.ts (Liabilities, sandbox; approval-gated tool), vision.ts, watchRegister.mock.ts
+/lib/assets               types.ts (assets, PII items), ownerMatch.ts
+/lib/format.ts            display formatting (formatUsd): tools return finished text, the model quotes it
 /data/params.json         parameter registry (source of truth for every number)
-/data/demo                demo personas and watch price table (with source + date)
+/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape
 /scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS), check-params.ts, check-product-terms.ts (propose only)
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
 THIRD_PARTY.md, .env.example
@@ -187,10 +189,13 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 type Goal = { cashNeededUsd: number; neededBy: string; repayHorizonYears?: number;
   keepAssetIds: string[]; keepAssetNotes?: string[]; // notes = user's words until assets have IDs
   monthlyCapacityUsd?: number; age62Plus?: boolean };
-// CaseFile (lib/agent/types.ts): { id, createdAt, stage, goal?, messages, pendingApproval, events }
-type RealEstateAsset = { id: string; kind: 'real_estate'; addressRef: string; // PII stored off-chain
+// CaseFile (lib/agent/types.ts): { id, createdAt, stage, goal?, assets, pii, messages, pendingApproval, events }
+// pii: { [ref]: { kind: 'address' | 'person_name', value } } — never logged, never sent to the model in tool output
+type RealEstateAsset = { id: string; kind: 'real_estate'; addressRef: string; // key into CaseFile.pii
   avm?: { low: number; mid: number; high: number; source: string; asOf: string };
-  mortgageBalanceUsd?: number; interiorNotes?: string };
+  ownerMatch?: 'match' | 'partial' | 'no_match' | 'unknown'; ownerOccupied?: boolean;
+  lastSale?: { date: string; priceUsd: number };
+  mortgageBalanceUsd?: number; mortgageSource?: 'user_stated' | 'plaid'; interiorNotes?: string };
 type WatchAsset = { id: string; kind: 'watch'; model?: string; reference?: string; serialHash?: string;
   hasBox?: boolean; hasPapers?: boolean; category: 'sport_steel' | 'dress_gold' | 'specialty_vintage';
   marketValue?: { usd: number; source: string; asOf: string }; theftCheck: 'not_checked' | 'clear' | 'flagged' | 'simulated_clear' };
@@ -234,7 +239,7 @@ Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vit
 | `npm run test:watch` | Unit tests in watch mode |
 | `npm run params:check` | Freshness of every registry value today (or `-- YYYY-MM-DD`) |
 | `npm run params:refresh` | Update market values from FRED (needs `FRED_API_KEY` in `.env.local`; `-- --dry-run` to preview) |
-| `npm run agent:chat` | Chat with the agent in the terminal (Gemini; `-- "msg1" "msg2"` replays messages). Made-up personas for demos |
+| `npm run agent:chat` | Chat with the agent in the terminal (Gemini; `-- "msg1" "msg2"` replays messages). Uses RentCast when `RENTCAST_API_KEY` is set (cached 30 days in git-ignored `.cache/rentcast/`), otherwise or with `PROPERTY_DATA_SOURCE=demo` the demo homes in `data/demo/properties.json`. With `PLAID_CLIENT_ID` + `PLAID_SECRET` it can also read a sandbox mortgage after you approve. Made-up personas for demos |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |

@@ -4,7 +4,7 @@ A neutral AI agent for US users who need cash. It compares every way to turn a h
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
 to the next step (including tokenization on Solana) only after explicit approval.
 
-> Status: in development (milestone M3: the agent can take a user's cash goal in a terminal chat).
+> Status: in development (milestone M4: in a terminal chat the agent takes the cash goal, looks up a home's value range and owner check, and records the mortgage balance).
 >
 > Not investment or financial advice.
 
@@ -20,7 +20,7 @@ npm run dev                  # then open http://localhost:3000
 
 ## Try the agent (terminal)
 
-Needs `GEMINI_API_KEY` in `.env.local` (paid tier). Use made-up personas in demos.
+Needs `GEMINI_API_KEY` in `.env.local` (paid tier). Use made-up personas in demos. With `RENTCAST_API_KEY` the home lookup uses RentCast; without it, or with `PROPERTY_DATA_SOURCE=demo`, it uses the made-up homes in `data/demo/properties.json` (try "742 Demo Lane, Exampleville, CA 99999", title name "Jordan Sample").
 
 ```bash
 npm run agent:chat

@@ -37,6 +37,9 @@ yarn-error.log*
 # internal planning notes (Korean, kept out of the public repo)
 /docs/internal/
 
+# cached API responses: they contain personal data (owner names, addresses)
+/.cache/
+
 # vercel
 .vercel
 
