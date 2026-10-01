@@ -35,6 +35,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 - **No unlicensed third-party assets**: no stock images, brand logos or fonts we have no right to use (§12(b)(ii)); no Colosseum trademarks without written consent (§17). Use generic watch names in demo data, not brand logos.
 - **Track third-party code** in `THIRD_PARTY.md` with licenses (§9).
 - **Not investment or financial advice.** Show this notice wherever a recommendation appears.
+- **LLM data.** The Gemini key is on the paid tier (owner, 2026-10-01): under the Gemini API terms Google does not use paid-tier prompts to improve its products and keeps them only for a limited time to detect abuse. Still send the model only what a step needs, and use made-up personas in demos and videos.
 - **Data notices.** Wherever FRED, Freddie Mac PMMS or SOFR values are shown, show the notices listed in `THIRD_PARTY.md` (FRED, Freddie Mac and New York Fed terms).
 - **PII stays off-chain.** Addresses, owner names, serial numbers and documents are stored off-chain; only hashes go on-chain. Never log raw PII.
 - **No custody or lien claims.** The app never claims it holds a watch or records a lien; those are partner steps (simulated in the demo).
@@ -65,7 +66,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | Chain / track | **Solana** (decided 2026-10-01): devnet for the demo, Solana track (Rules §14(e)); Token-2022 + Solana Agent Kit |
 | Arena category | Tentative: Real World Assets (RWA); alternative: AI Platforms / Agents |
 | Project name | **TBD** (repo and package use the working name `rwa-liquidity-agent` until decided) |
-| LLM provider | **TBD** |
+| LLM provider | **Google Gemini API** (decided 2026-10-01), SDK `@google/genai`, default model `gemini-3.8-flash` (function calling + image input), key `GEMINI_API_KEY` in `.env.local` |
 | Watch price data source | **TBD** (no API verified yet; MVP uses a manual price table with source + date) |
 | Hosting / OSS license | **TBD** |
 
@@ -108,7 +109,7 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 ```
 /app                      Next.js App Router (landing chat, /case/[id], /token/[mint], /settle/[id])
 /components               Chat, CameraCapture, PathTable, TermSheet, PassportView, ReceiptBadge, SimulatedTag
-/lib/agent                orchestrator, tool definitions, prompts (English)
+/lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), types.ts
 /lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
 /lib/chain                adapter.ts, solana.ts, mock.ts
@@ -184,7 +185,9 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 
 ```ts
 type Goal = { cashNeededUsd: number; neededBy: string; repayHorizonYears?: number;
-  keepAssetIds: string[]; monthlyCapacityUsd?: number; age62Plus?: boolean };
+  keepAssetIds: string[]; keepAssetNotes?: string[]; // notes = user's words until assets have IDs
+  monthlyCapacityUsd?: number; age62Plus?: boolean };
+// CaseFile (lib/agent/types.ts): { id, createdAt, stage, goal?, messages, pendingApproval, events }
 type RealEstateAsset = { id: string; kind: 'real_estate'; addressRef: string; // PII stored off-chain
   avm?: { low: number; mid: number; high: number; source: string; asOf: string };
   mortgageBalanceUsd?: number; interiorNotes?: string };
@@ -231,11 +234,12 @@ Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vit
 | `npm run test:watch` | Unit tests in watch mode |
 | `npm run params:check` | Freshness of every registry value today (or `-- YYYY-MM-DD`) |
 | `npm run params:refresh` | Update market values from FRED (needs `FRED_API_KEY` in `.env.local`; `-- --dry-run` to preview) |
+| `npm run agent:chat` | Chat with the agent in the terminal (Gemini; `-- "msg1" "msg2"` replays messages). Made-up personas for demos |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |
 
-Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`), tsx 4 (runs `scripts/*.ts`).
+Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`), tsx 4 (runs `scripts/*.ts`), @google/genai 2 (Gemini API).
 
 ## 12. Definition of done
 Public repo with OSS license; deployed demo; English README (problem, how it works, why blockchain, what is simulated, trust assumptions, how to run); demo and pitch videos per the Arena form; all members registered on colosseum.com; team leader submits in the Arena before the deadline.

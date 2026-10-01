@@ -4,7 +4,7 @@ A neutral AI agent for US users who need cash. It compares every way to turn a h
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
 to the next step (including tokenization on Solana) only after explicit approval.
 
-> Status: in development (milestone M1: money math with unit tests). The agent is not built yet.
+> Status: in development (milestone M3: the agent can take a user's cash goal in a terminal chat).
 >
 > Not investment or financial advice.
 
@@ -16,6 +16,14 @@ Requires Node.js 22.12 or later (the test runner, Vitest 5, needs it).
 npm install
 cp .env.example .env.local   # fill in keys only when a milestone needs them
 npm run dev                  # then open http://localhost:3000
+```
+
+## Try the agent (terminal)
+
+Needs `GEMINI_API_KEY` in `.env.local` (paid tier). Use made-up personas in demos.
+
+```bash
+npm run agent:chat
 ```
 
 ## Checks

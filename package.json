@@ -13,9 +13,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "params:check": "tsx scripts/check-params.ts",
-    "params:refresh": "tsx --env-file-if-exists=.env.local scripts/refresh-params.ts"
+    "params:refresh": "tsx --env-file-if-exists=.env.local scripts/refresh-params.ts",
+    "agent:chat": "tsx --env-file-if-exists=.env.local scripts/agent-chat.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.25.0",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8"

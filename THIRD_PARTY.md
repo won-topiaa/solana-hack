@@ -5,7 +5,7 @@ with its license. Versions and licenses below are read from the installed packag
 (`node_modules/<name>/package.json`). The full dependency tree, including transitive
 packages, is pinned in `package-lock.json`.
 
-Last updated: 2026-10-01 (milestone M2).
+Last updated: 2026-10-01 (milestone M3).
 
 ## Runtime dependencies
 
@@ -14,6 +14,7 @@ Last updated: 2026-10-01 (milestone M2).
 | next | 16.3.8 | MIT | https://github.com/vercel/next.js |
 | react | 19.2.8 | MIT | https://github.com/react/react |
 | react-dom | 19.2.8 | MIT | https://github.com/react/react |
+| @google/genai | 2.25.0 | Apache-2.0 | https://github.com/googleapis/js-genai |
 
 ## Development dependencies
 
@@ -55,6 +56,12 @@ require a notice wherever its data is presented (README, and the UI once these v
 
 FRED's terms also ask for permission from the owner of a copyrighted third-party series; the
 owners' own terms above allow use with attribution. Re-check before a public launch.
+
+## Services
+
+| Service | Used for | Terms | Notes |
+|---|---|---|---|
+| Google Gemini API | The agent's conversation and tool calling (later: reading photos) | https://ai.google.dev/gemini-api/terms | Users must be 18+. Our key is on the paid tier: Google does not use prompts to improve its products and keeps them only for a limited time to detect abuse. |
 
 ## Images, logos and other media
 
