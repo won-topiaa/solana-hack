@@ -35,6 +35,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 - **No unlicensed third-party assets**: no stock images, brand logos or fonts we have no right to use (§12(b)(ii)); no Colosseum trademarks without written consent (§17). Use generic watch names in demo data, not brand logos.
 - **Track third-party code** in `THIRD_PARTY.md` with licenses (§9).
 - **Not investment or financial advice.** Show this notice wherever a recommendation appears.
+- **Data notices.** Wherever FRED, Freddie Mac PMMS or SOFR values are shown, show the notices listed in `THIRD_PARTY.md` (FRED, Freddie Mac and New York Fed terms).
 - **PII stays off-chain.** Addresses, owner names, serial numbers and documents are stored off-chain; only hashes go on-chain. Never log raw PII.
 - **No custody or lien claims.** The app never claims it holds a watch or records a lien; those are partner steps (simulated in the demo).
 
@@ -109,12 +110,12 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /components               Chat, CameraCapture, PathTable, TermSheet, PassportView, ReceiptBadge, SimulatedTag
 /lib/agent                orchestrator, tool definitions, prompts (English)
 /lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
-/lib/params               load.ts, staleness.ts
+/lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
 /lib/chain                adapter.ts, solana.ts, mock.ts
 /lib/integrations         rentcast.ts, plaid.ts, vision.ts, watchRegister.mock.ts
 /data/params.json         parameter registry (source of truth for every number)
 /data/demo                demo personas and watch price table (with source + date)
-/scripts                  refresh-params.ts (FRED SOFR, Freddie Mac PMMS), check-product-terms.ts (propose only)
+/scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS), check-params.ts, check-product-terms.ts (propose only)
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
 THIRD_PARTY.md, .env.example
 ```
@@ -228,11 +229,13 @@ Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vit
 | `npm run dev` | Dev server at http://localhost:3000 (Turbopack) |
 | `npm test` | Unit tests once (Vitest); §8.5 test vectors live in `lib/calc/*.test.ts` |
 | `npm run test:watch` | Unit tests in watch mode |
+| `npm run params:check` | Freshness of every registry value today (or `-- YYYY-MM-DD`) |
+| `npm run params:refresh` | Update market values from FRED (needs `FRED_API_KEY` in `.env.local`; `-- --dry-run` to preview) |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |
 
-Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`).
+Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`), tsx 4 (runs `scripts/*.ts`).
 
 ## 12. Definition of done
 Public repo with OSS license; deployed demo; English README (problem, how it works, why blockchain, what is simulated, trust assumptions, how to run); demo and pitch videos per the Arena form; all members registered on colosseum.com; team leader submits in the Arena before the deadline.

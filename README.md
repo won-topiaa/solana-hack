@@ -21,10 +21,17 @@ npm run dev                  # then open http://localhost:3000
 ## Checks
 
 ```bash
-npm test        # unit tests for the money math (Vitest)
+npm test        # unit tests (Vitest)
+npm run params:check     # how fresh each value in data/params.json is today
 npm run lint    # ESLint
 npm run build   # production build, includes the TypeScript type check
 ```
+
+## Data sources
+
+This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+Mortgage rate averages: source Freddie Mac Primary Mortgage Market Survey. SOFR: Federal Reserve Bank
+of New York; see [THIRD_PARTY.md](THIRD_PARTY.md) for the full notices and terms of use.
 
 ## Third-party code
 
