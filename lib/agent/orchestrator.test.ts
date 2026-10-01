@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { testRegistry } from "../params/test-fixtures";
 import { createCaseFile, MAX_MODEL_CALLS_PER_TURN, resolveApproval, sendUserMessage } from "./orchestrator";
 import { createScriptedLlm } from "./scripted";
 import { createDemoPropertySource } from "../integrations/rentcast";
 import { createAgentTools, type AgentTool } from "./tools";
 import type { LlmReply } from "./llm";
 
-const TOOLS = createAgentTools({ propertySource: createDemoPropertySource() });
+const TOOLS = createAgentTools({ registry: testRegistry(), propertySource: createDemoPropertySource() });
 
 // 2026-10-01 15:00 UTC is 11:00 on 2026-10-01 in New York.
 const now = () => new Date("2026-10-01T15:00:00Z");

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { testRegistry } from "../params/test-fixtures";
 import { createDemoPropertySource } from "../integrations/rentcast";
 import type { WatchReading, WatchVision } from "../integrations/vision";
 import type { LlmReply } from "./llm";
@@ -52,7 +53,7 @@ function caseWithPhoto(): { caseFile: CaseFile; photoId: string } {
 }
 
 function toolsWith(vision: WatchVision) {
-  return createAgentTools({ propertySource: createDemoPropertySource(() => "2026-10-02"), vision });
+  return createAgentTools({ registry: testRegistry(), propertySource: createDemoPropertySource(() => "2026-10-02"), vision });
 }
 
 describe("watch photos (M5 done-when: a photo of a demo watch fills WatchAsset)", () => {

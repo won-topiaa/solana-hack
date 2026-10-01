@@ -4,7 +4,7 @@ A neutral AI agent for US users who need cash. It compares every way to turn a h
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
 to the next step (including tokenization on Solana) only after explicit approval.
 
-> Status: in development (milestone M5: in a terminal chat the agent takes the cash goal, looks up a home and its mortgage, and reads watch photos).
+> Status: in development (milestone M6: in a terminal chat the agent takes the cash goal and the assets, compares every path, recommends one with fixed rules, and prepares the term sheet, asset passports and a hashed recommendation receipt).
 >
 > Not investment or financial advice.
 

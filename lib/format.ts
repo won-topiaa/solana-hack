@@ -8,7 +8,7 @@ export function formatUsd(amount: number): string {
   return usd.format(amount);
 }
 
-/** 3.99 -> "3.99%" (the input is already a percentage, not a fraction). */
+/** 3.99 -> "3.99%", 4.5531 -> "4.55%" (the input is already a percentage, not a fraction). */
 export function formatPercent(percentage: number): string {
-  return `${Number(percentage.toFixed(3))}%`;
+  return `${Number(percentage.toFixed(2))}%`;
 }

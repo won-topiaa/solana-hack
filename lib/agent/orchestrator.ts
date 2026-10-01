@@ -70,7 +70,8 @@ export async function resolveApproval(
   if (approved) {
     const tool = deps.tools.find((candidate) => candidate.declaration.name === pending.call.name);
     if (!tool) throw new Error(`Tool ${pending.call.name} is no longer available`);
-    const outcome = await tool.run(pending.call.args, { caseFile: file, today: todayInNewYork(currentTime(deps)) });
+    const time = currentTime(deps);
+    const outcome = await tool.run(pending.call.args, { caseFile: file, today: todayInNewYork(time), now: time });
     file = outcome.caseFile;
     output = outcome.output;
   }
@@ -143,7 +144,7 @@ async function runToolCalls(
         requestedAt: currentTime(deps).toISOString(),
       };
     } else {
-      const outcome = await tool.run(call.args, { caseFile: file, today });
+      const outcome = await tool.run(call.args, { caseFile: file, today, now: currentTime(deps) });
       file = withEvent(outcome.caseFile, deps, "tool_run", call.name);
       results.push(resultFor(call, outcome.output));
     }

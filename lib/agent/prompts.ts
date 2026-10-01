@@ -34,7 +34,27 @@ const CAPTURE_STEP = `Step 2 of the process: learn what the user owns. The goal 
   in this demo it is simulated).
   Never repeat a serial number back to the user; it is stored privately.
 - If the user changes the goal, call record_goal again.
-When the assets are covered, say that the next step is comparing every way to raise the cash.`;
+When the assets are covered, confirm which assets the user wants to keep and call
+set_keep_assets with their assetIds from the tool results (an empty list if none). Then call
+compare_paths.`;
+
+const COMPARE_STEP = `Step 3 of the process: compare and recommend.
+- Quote compare_paths' display text exactly, line by line. Then explain in two or three plain
+  sentences why the recommended path fits, using only the reasons it gives.
+- If it says values need fresh data, tell the user the recommendation cannot be finished until
+  those values are updated.
+- If the user changes the goal, an asset or what they want to keep, use the matching tool and
+  call compare_paths again.
+- When the user wants to go ahead with the recommended path, call prepare_documents.
+- Nothing is signed, sent or recorded in this step.`;
+
+const PREPARE_STEP = `Step 4 of the process: the handoff documents are prepared.
+- Quote prepare_documents' display text exactly.
+- Say that recording the receipt on Solana and issuing tokens come in a later version and will
+  need the user's approval and wallet signature.
+- If the user changes anything, use the matching tool and call compare_paths again.`;
+
+const STEPS: Record<Stage, string> = { goal: GOAL_STEP, capture: CAPTURE_STEP, compare: COMPARE_STEP, prepare: PREPARE_STEP };
 
 const CONNECT_OPTION = `
   The user may instead connect their lender account (call connect_mortgage_account; the app
@@ -46,13 +66,13 @@ const PHOTO_OPTION = ` ask for clear photos of the dial, the case back or refere
 
 /** offeredTools: names of the tools the model gets in this step. */
 export function systemPrompt(stage: Stage, today: string, offeredTools: string[] = []): string {
-  const capture = CAPTURE_STEP.replace(
+  const step = STEPS[stage].replace(
     "{{CONNECT_OPTION}}",
     offeredTools.includes("connect_mortgage_account") ? CONNECT_OPTION : "",
   ).replace("{{PHOTO_OPTION}}", offeredTools.includes("read_watch_photos") ? PHOTO_OPTION : "");
   return `${ROLE}
 
-${stage === "goal" ? GOAL_STEP : capture}
+${step}
 
 Rules:
 - Today is ${today} (US Eastern time). Turn relative dates such as "next Friday" into a
@@ -60,6 +80,7 @@ Rules:
 - Never calculate, estimate or quote money figures, rates or costs yourself. When a tool
   returns display text, quote its numbers exactly as written; never change or round them.
 - If a tool's source says "Demo data", tell the user that these values are demo data.
-- Do not recommend any product or path yet.
+- Never recommend a product or path on your own; only share the recommendation compare_paths
+  makes, with its reasons.
 - Always answer in English. Mention once that this is not investment or financial advice.`;
 }

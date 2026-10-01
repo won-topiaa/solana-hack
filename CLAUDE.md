@@ -112,12 +112,13 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, photos.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), types.ts
 /lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
+/lib/recommend            recommend.ts (paths + rules + freshness gate), realEstate.ts, watches.ts, display.ts, termSheet.ts, passport.ts (passport + receipt), canonical.ts, personas.ts
 /lib/chain                adapter.ts, solana.ts, mock.ts
 /lib/integrations         rentcast.ts (live + demo source + cache), rentcastCache.ts (disk cache), plaid.ts (Liabilities, sandbox; approval-gated tool), vision.ts (Gemini image + JSON output), watchRegister.mock.ts (simulated, approval-gated)
 /lib/assets               types.ts (assets, PII items, photos), ownerMatch.ts, serial.ts (salted serial hash), watchPrices.ts
 /lib/format.ts            display formatting (formatUsd): tools return finished text, the model quotes it
 /data/params.json         parameter registry (source of truth for every number)
-/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape; watch-prices.json = made-up demo price table
+/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape; watch-prices.json = made-up demo price table; personas.json = demo personas A, B, B2, C (§8.6)
 /scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS), check-params.ts, check-product-terms.ts (propose only)
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
 THIRD_PARTY.md, .env.example
@@ -181,6 +182,30 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 | loan, both (75% / 70%) | 29,250 (short 750) |
 | keep A: loan on A + sell B to dealer | B must fetch >= 75.0% of value; at 80% total is 30,750 |
 
+### 8.6 Comparison and recommendation (owner decisions 2026-10-02; code in `/lib/recommend`)
+- Horizon `t` = the user's repayment horizon, else `comparison_default_horizon_years` (10).
+- HELOC: interest-only payment (§8.5); cost = interest over `t`. Home equity loan: equal monthly payments over `t`:
+  `pay = P*r/(1-(1+r)^-n)`, `r = rate/12`, `n = 12t`; cost = all payments − `P`.
+- If (mortgage + new loan) / home value > `heloc_avg_rate_cltv_basis` (70%): warn that the rate may be higher (no block).
+- HEI: settle at `t` (at most the longest term) for each growth in `hei_scenario_growth_rates` (0%, +3%/yr); rank by the costliest scenario.
+- Watch loan: no cost number (rates not published). Refinance: not compared. Reverse mortgage: information only, 62+ (RE-3).
+- A path is suitable when it reaches the goal, does not sell a kept asset, its monthly payment fits the budget, and (HEI) it is eligible.
+- Watch rules: kept and `t` ≤ longest watch-loan term (180 days) → loan (W-3); not kept and needed within `watch_dealer_urgent_days` (1) → dealer (W-1); otherwise not kept → marketplace (W-2). Plan: loans first, then sales from the largest, until the goal.
+- Lane order (provisional, owner to confirm): if `t` ≤ 180 days, watches first and a HELOC covers any shortfall (X-1); otherwise the home lane.
+- Home lane: `t` ≤ 3 years and an affordable loan → the cheaper of HELOC / home equity loan (RE-1); else budget below the HELOC payment → HEI (RE-2); else the lowest total cost (provisional).
+- No recommendation is finished if any registry value behind the shown numbers is stale (M2 gate).
+- Receipt = hashes of the canonical JSON of the recommendation and of the asset passports, plus the registry version. Identifiers in passports are salted hashes (salt stays off-chain).
+
+| Check | Expected |
+|---|---|
+| Home equity loan 150,000 at 7.42%, 10 years | 1,774.27/month; interest 62,912.37 |
+| Home equity loan 150,000 at 7.42%, 2 years | 6,744.48/month |
+| CLTV 400,000 + 150,000 on 1,000,000 | 55% |
+| Persona A (2 watches, 30,000 by tomorrow, keep sport watch) | loan on A + dealer sale of B, 29,250–32,250; rules W-3, W-1; B must bring ≥ 75% |
+| Persona B (home, 150,000, 10 years, budget 0) | HEI; rule RE-2; pay 234,131 flat (4.55%/yr) or 314,652 at +3%/yr (7.69%/yr) |
+| Persona B2 (home, 150,000, 2 years, budget 1,000) | HELOC; rule RE-1; interest 21,270; home equity loan 6,744/month is over budget |
+| Persona C (home + 2 watches, 40,000, 3 months, budget 500) | loan on A + marketplace sale of B + HELOC 7,225; rules W-3, W-2, X-1, RE-1 |
+
 ---
 
 ## 9. Data contracts (draft)
@@ -190,7 +215,8 @@ type Goal = { cashNeededUsd: number; neededBy: string; repayHorizonYears?: numbe
   keepAssetIds: string[]; keepAssetNotes?: string[]; // notes = user's words until assets have IDs
   monthlyCapacityUsd?: number; age62Plus?: boolean };
 // CaseFile (lib/agent/types.ts): { id, createdAt, stage, goal?, assets, pii, messages, pendingApproval, events }
-// pii: { [ref]: { kind: 'address' | 'person_name', value } } — never logged, never sent to the model in tool output
+// pii: { [ref]: { kind: 'address' | 'person_name', value, salt? } | { kind: 'serial', value, salt } } — never logged, never sent to the model in tool output
+// PathOption, Recommendation (+ reasons, inputs without PII): lib/recommend/types.ts. AssetPassport, Receipt: lib/recommend/passport.ts
 type RealEstateAsset = { id: string; kind: 'real_estate'; addressRef: string; // key into CaseFile.pii
   avm?: { low: number; mid: number; high: number; source: string; asOf: string };
   ownerMatch?: 'match' | 'partial' | 'no_match' | 'unknown'; ownerOccupied?: boolean;

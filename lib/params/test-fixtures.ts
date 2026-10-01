@@ -48,5 +48,14 @@ export function testRegistry(): Registry {
     }),
     watch_loan_term_days: entry({ kind: "product", value: { min: 30, max: 180 }, unit: "days", ...checked }),
     avm_median_error: entry({ kind: "reference", value: { off_market: 0.075 }, valid_days: 90 }),
+    // Comparison settings (M6)
+    home_equity_loan_avg_rate: entry({ kind: "market", value: 0.0742, as_of: "2026-09-25", valid_days: 7 }),
+    heloc_avg_rate_cltv_basis: entry({ kind: "market", value: 0.7, as_of: "2026-09-25", valid_days: 7 }),
+    comparison_default_horizon_years: entry({ kind: "design", value: 10, valid_days: null }),
+    hei_scenario_growth_rates: entry({ kind: "design", value: [0, 0.03], valid_days: null }),
+    hei_term_years: entry({ kind: "design", value: { default: 10, min: 5, max: 30 }, valid_days: null }),
+    heloc_first_threshold_years: entry({ kind: "design", value: 3, valid_days: null }),
+    watch_dealer_urgent_days: entry({ kind: "design", value: 1, valid_days: null }),
+    reverse_mortgage_min_age: entry({ kind: "product", value: 62, ...checked, valid_days: 365 }),
   });
 }

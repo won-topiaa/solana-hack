@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { helocInterestOnlyMonthlyUsd, interestOnlyTotalUsd } from "./compare";
+import {
+  amortizedMonthlyPaymentUsd,
+  amortizedTotalInterestUsd,
+  combinedLoanToValue,
+  helocInterestOnlyMonthlyUsd,
+  interestOnlyTotalUsd,
+} from "./compare";
 import { HELOC_RATE } from "./test-fixtures";
 
 describe("helocInterestOnlyMonthlyUsd", () => {
@@ -22,5 +28,27 @@ describe("interestOnlyTotalUsd: $150,000 at 7.09%", () => {
 
   it.each(cases)("over %s years: %s USD", (years, totalUsd) => {
     expect(interestOnlyTotalUsd(150_000, HELOC_RATE, years)).toBeCloseTo(totalUsd, 2);
+  });
+});
+
+describe("home equity loan, equal monthly payments (CLAUDE.md §8.6)", () => {
+  // $150,000 at the 7.42% fixed average rate.
+  it("pays $1,774.27 a month over 10 years, $62,912.37 interest in total", () => {
+    expect(amortizedMonthlyPaymentUsd(150_000, 0.0742, 10)).toBeCloseTo(1_774.27, 2);
+    expect(amortizedTotalInterestUsd(150_000, 0.0742, 10)).toBeCloseTo(62_912.37, 2);
+  });
+
+  it("pays $6,744.48 a month over 2 years", () => {
+    expect(amortizedMonthlyPaymentUsd(150_000, 0.0742, 2)).toBeCloseTo(6_744.48, 2);
+  });
+
+  it("divides evenly when the rate is 0", () => {
+    expect(amortizedMonthlyPaymentUsd(12_000, 0, 1)).toBe(1_000);
+  });
+});
+
+describe("combinedLoanToValue", () => {
+  it("is 55% for a $400,000 mortgage plus $150,000 on a $1,000,000 home", () => {
+    expect(combinedLoanToValue(400_000, 150_000, 1_000_000)).toBeCloseTo(0.55, 10);
   });
 });

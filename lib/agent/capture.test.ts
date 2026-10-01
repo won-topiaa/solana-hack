@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { testRegistry } from "../params/test-fixtures";
 import { createDemoPropertySource, DEMO_SOURCE_LABEL } from "../integrations/rentcast";
 import type { LlmReply } from "./llm";
 import { createCaseFile, sendUserMessage } from "./orchestrator";
@@ -11,7 +12,7 @@ import type { CaseFile } from "./types";
 // 2026-10-01 15:00 UTC is 11:00 on 2026-10-01 in New York.
 const now = () => new Date("2026-10-01T15:00:00Z");
 const DEMO_HOME = "742 Demo Lane, Exampleville, CA 99999";
-const tools = createAgentTools({ propertySource: createDemoPropertySource(() => "2026-10-01") });
+const tools = createAgentTools({ registry: testRegistry(), propertySource: createDemoPropertySource(() => "2026-10-01") });
 
 const say = (text: string): LlmReply => ({ text, toolCalls: [] });
 const callTool = (name: string, args: Record<string, unknown>): LlmReply => ({
@@ -158,7 +159,7 @@ describe("mortgage from the lender through Plaid (approval required)", () => {
 
   it("asks first, contacts Plaid only after a yes, then saves the balance", async () => {
     const calls: string[] = [];
-    const plaidTools = createAgentTools({
+    const plaidTools = createAgentTools({ registry: testRegistry(),
       propertySource: createDemoPropertySource(() => "2026-10-01"),
       mortgageSource: fakeLender(calls),
     });

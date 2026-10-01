@@ -2,6 +2,9 @@
 // agent knows about one user's case) and the messages exchanged with the model.
 
 import type { Asset, Photo, PiiItem } from "../assets/types";
+import type { AssetPassport, Receipt } from "../recommend/passport";
+import type { HeiTermSheet } from "../recommend/termSheet";
+import type { Recommendation } from "../recommend/types";
 
 /** CLAUDE.md §9. keepAssetIds is filled once assets are captured (step 2). */
 export type Goal = {
@@ -14,8 +17,8 @@ export type Goal = {
   age62Plus?: boolean;
 };
 
-/** Steps of CLAUDE.md §5 built so far. */
-export type Stage = "goal" | "capture";
+/** Steps of CLAUDE.md §5 built so far: goal, capture (+ verify, value), compare, prepare. */
+export type Stage = "goal" | "capture" | "compare" | "prepare";
 
 export type ToolCall = {
   id: string; // our id, unique within the case
@@ -58,6 +61,8 @@ export type CaseFile = {
   assets: Asset[];
   pii: Record<string, PiiItem>; // personal data, referenced by key from assets; never logged
   photos: Record<string, Photo>; // uploaded photos (may show serial numbers); off-chain
+  recommendation?: Recommendation; // the latest comparison (step 5)
+  handoff?: { termSheet?: HeiTermSheet; passports: AssetPassport[]; receipt: Receipt }; // step 6, off-chain
   messages: AgentMessage[];
   pendingApproval: PendingApproval | null;
   events: CaseEvent[];

@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-10-01.4",
+  "registry_version": "2026-10-01.5",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
@@ -18,6 +18,10 @@
     {
       "version": "2026-10-01.4",
       "note": "refresh-params: sofr 0.039 -> 0.039 (as_of 2026-09-28 -> 2026-09-30)"
+    },
+    {
+      "version": "2026-10-01.5",
+      "note": "M6 comparison settings (owner decisions 2026-10-02): heloc_avg_rate_cltv_basis, comparison_default_horizon_years, hei_scenario_growth_rates, watch_dealer_urgent_days. No existing values changed."
     }
   ],
   "rules": {
@@ -251,6 +255,49 @@
       "as_of": "2026-10-01",
       "checked_at": "2026-10-01",
       "valid_days": 30
+    },
+    "heloc_avg_rate_cltv_basis": {
+      "value": 0.7,
+      "unit": "combined loan-to-value",
+      "kind": "market",
+      "source": "Curinos via Yahoo Finance: the average HELOC and home equity loan rates assume combined loan-to-value under 70% and a credit score of 780 or more. Update together with heloc_avg_rate.",
+      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-september-25-2026-understanding-how-equity-rates-work-matters-100000210.html",
+      "as_of": "2026-09-25",
+      "checked_at": null,
+      "valid_days": 7
+    },
+    "comparison_default_horizon_years": {
+      "value": 10,
+      "unit": "years",
+      "kind": "design",
+      "source": "Owner decision 2026-10-02: when the user gives no repayment horizon, loans and HEI settlement are compared over 10 years (same as the HEI default term).",
+      "source_url": null,
+      "as_of": "2026-10-02",
+      "checked_at": null,
+      "valid_days": null
+    },
+    "hei_scenario_growth_rates": {
+      "value": [
+        0,
+        0.03
+      ],
+      "unit": "yearly home price growth",
+      "kind": "design",
+      "source": "Owner decision 2026-10-02: HEI costs are shown for flat prices and +3% a year (PLAN §5.3).",
+      "source_url": null,
+      "as_of": "2026-10-02",
+      "checked_at": null,
+      "valid_days": null
+    },
+    "watch_dealer_urgent_days": {
+      "value": 1,
+      "unit": "days until the cash is needed",
+      "kind": "design",
+      "source": "CLAUDE.md §8.4 rule W-1: cash needed within about 1 day and willing to sell -> dealer instant offer.",
+      "source_url": null,
+      "as_of": "2026-10-02",
+      "checked_at": null,
+      "valid_days": null
     }
   }
 }

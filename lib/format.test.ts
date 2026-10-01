@@ -13,5 +13,7 @@ describe("formatPercent", () => {
   it("writes a percentage without float noise", () => {
     expect(formatPercent(3.99)).toBe("3.99%");
     expect(formatPercent(7.090000000000001)).toBe("7.09%");
+    expect(formatPercent(4.5531)).toBe("4.55%");
+    expect(formatPercent(23.4131)).toBe("23.41%");
   });
 });

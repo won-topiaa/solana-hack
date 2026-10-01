@@ -51,6 +51,22 @@ export function getLtvTable(registry: Registry, key: string): LtvByCategory {
   return table;
 }
 
+export function getNumberList(registry: Registry, key: string): number[] {
+  const value = entryValue(registry, key);
+  if (!Array.isArray(value) || value.length === 0 || !value.every(isNumber)) {
+    throw new Error(`${key} must be a non-empty list of numbers`);
+  }
+  return value;
+}
+
+export function getTermYears(registry: Registry, key: string): { default: number; min: number; max: number } {
+  const value = entryValue(registry, key) as { default?: unknown; min?: unknown; max?: unknown } | null;
+  if (!value || !isNumber(value.default) || !isNumber(value.min) || !isNumber(value.max)) {
+    throw new Error(`${key} must be an object with numeric default, min and max`);
+  }
+  return { default: value.default, min: value.min, max: value.max };
+}
+
 type WithKeys<T> = T & { usedKeys: string[] };
 
 /** Everything heiTerms and settle need from the registry (CLAUDE.md §8.1-8.2). */
@@ -95,6 +111,39 @@ export function watchTerms(registry: Registry): WithKeys<{
       "chrono24_private_seller_fee",
       "watch_loan_ltv",
       "watch_loan_term_days",
+    ],
+  };
+}
+
+/** Rates and settings the comparison reads (CLAUDE.md §8.4, §8.6). */
+export function comparisonTerms(registry: Registry): WithKeys<{
+  helocRate: number;
+  homeEquityLoanRate: number;
+  rateCltvBasis: number;
+  defaultHorizonYears: number;
+  heiGrowthScenarios: number[];
+  heiTermYears: { default: number; min: number; max: number };
+  helocFirstYears: number;
+  dealerUrgentDays: number;
+}> {
+  return {
+    helocRate: getNumber(registry, "heloc_avg_rate"),
+    homeEquityLoanRate: getNumber(registry, "home_equity_loan_avg_rate"),
+    rateCltvBasis: getNumber(registry, "heloc_avg_rate_cltv_basis"),
+    defaultHorizonYears: getNumber(registry, "comparison_default_horizon_years"),
+    heiGrowthScenarios: getNumberList(registry, "hei_scenario_growth_rates"),
+    heiTermYears: getTermYears(registry, "hei_term_years"),
+    helocFirstYears: getNumber(registry, "heloc_first_threshold_years"),
+    dealerUrgentDays: getNumber(registry, "watch_dealer_urgent_days"),
+    usedKeys: [
+      "heloc_avg_rate",
+      "home_equity_loan_avg_rate",
+      "heloc_avg_rate_cltv_basis",
+      "comparison_default_horizon_years",
+      "hei_scenario_growth_rates",
+      "hei_term_years",
+      "heloc_first_threshold_years",
+      "watch_dealer_urgent_days",
     ],
   };
 }

@@ -16,8 +16,14 @@ import { SIMULATED_REGISTRY_LABEL, simulatedRegistryCheck } from "../integration
 import { checkGoal } from "./goal";
 import type { ToolDeclaration } from "./llm";
 import type { CaseFile, Stage } from "./types";
+import type { Registry } from "../params/types";
+import { hashOf } from "../recommend/canonical";
+import { describeRecommendation } from "../recommend/display";
+import { buildPassport, buildReceipt, type AssetPassport } from "../recommend/passport";
+import { assetSummaries, realEstateTerms, recommend, watchLabel } from "../recommend/recommend";
+import { buildHeiTermSheet, describeTermSheet, type HeiTermSheet } from "../recommend/termSheet";
 
-export type ToolContext = { caseFile: CaseFile; today: string };
+export type ToolContext = { caseFile: CaseFile; today: string; now: Date };
 
 export type ToolOutcome = { output: Record<string, unknown>; caseFile: CaseFile };
 
@@ -53,14 +59,19 @@ export const recordGoal: AgentTool = {
       required: ["cashNeededUsd", "neededBy"],
     },
   },
-  stages: ["goal", "capture"],
+  stages: ["goal", "capture", "compare"],
   requiresApproval: false,
   run(args, { caseFile, today }) {
     const check = checkGoal(args, today);
     if (!check.ok) return { output: { saved: false, problems: check.problems }, caseFile };
     return {
       output: { saved: true, goal: check.goal },
-      caseFile: { ...caseFile, goal: check.goal, stage: "capture" },
+      // Keep choices made earlier survive a goal update.
+      caseFile: {
+        ...caseFile,
+        goal: { ...check.goal, keepAssetIds: caseFile.goal?.keepAssetIds ?? [] },
+        stage: caseFile.stage === "goal" ? "capture" : caseFile.stage,
+      },
     };
   },
 };
@@ -95,7 +106,7 @@ export function createLookupHome(source: PropertyDataSource): AgentTool {
         required: ["address", "titleName"],
       },
     },
-    stages: ["capture"],
+    stages: ["capture", "compare"],
     requiresApproval: false,
     async run(args, { caseFile }) {
       const address = typeof args.address === "string" ? args.address.trim() : "";
@@ -172,7 +183,7 @@ export const recordMortgage: AgentTool = {
       required: ["assetId", "balanceUsd"],
     },
   },
-  stages: ["capture"],
+  stages: ["capture", "compare"],
   requiresApproval: false,
   run(args, { caseFile }) {
     const balance = args.balanceUsd;
@@ -209,7 +220,7 @@ export function createConnectMortgage(source: MortgageDataSource): AgentTool {
         required: ["assetId"],
       },
     },
-    stages: ["capture"],
+    stages: ["capture", "compare"],
     requiresApproval: true,
     describeForApproval: () => "Connect a lender account through Plaid (sandbox test data) to read the mortgage balance",
     async run(args, { caseFile }) {
@@ -305,7 +316,7 @@ export function createReadWatchPhotos(vision: WatchVision): AgentTool {
         required: ["photoIds"],
       },
     },
-    stages: ["capture"],
+    stages: ["capture", "compare"],
     requiresApproval: false,
     async run(args, { caseFile }) {
       const ids = Array.isArray(args.photoIds) ? args.photoIds.filter((id): id is string => typeof id === "string") : [];
@@ -368,7 +379,7 @@ export const recordWatch: AgentTool = {
       },
     },
   },
-  stages: ["capture"],
+  stages: ["capture", "compare"],
   requiresApproval: false,
   run(args, { caseFile }) {
     const problems: string[] = [];
@@ -423,7 +434,7 @@ export const checkWatchRegistry: AgentTool = {
       "In this demo the check is simulated and contacts no one. Quote the display text exactly.",
     parameters: { type: "object", properties: { assetId: { type: "string" } }, required: ["assetId"] },
   },
-  stages: ["capture"],
+  stages: ["capture", "compare"],
   requiresApproval: true,
   describeForApproval: () =>
     "Check the watch's serial number against a stolen-watch registry (simulated in this demo: nothing is sent)",
@@ -442,8 +453,146 @@ export const checkWatchRegistry: AgentTool = {
   },
 };
 
-/** All tools so far (M5: goal, home, mortgage, watches). Optional services add their tools. */
+// ---- Compare and prepare (M6) -----------------------------------------------
+
+/** A name for an asset that carries no personal data (no address, no serial). */
+function assetLabel(caseFile: CaseFile, assetId: string): string {
+  const asset = caseFile.assets.find((item) => item.id === assetId);
+  if (!asset) return assetId;
+  return asset.kind === "real_estate" ? `your home (${asset.id})` : `${watchLabel(asset)} (${asset.id})`;
+}
+
+export const setKeepAssets: AgentTool = {
+  declaration: {
+    name: "set_keep_assets",
+    description:
+      "Record which assets the user wants to keep, by assetId from earlier tool results (an empty list = none). " +
+      "Confirm with the user first. Quote the display text exactly.",
+    parameters: {
+      type: "object",
+      properties: { assetIds: { type: "array", items: { type: "string" } } },
+      required: ["assetIds"],
+    },
+  },
+  stages: ["capture", "compare"],
+  requiresApproval: false,
+  run(args, { caseFile }) {
+    if (!caseFile.goal) return { output: { saved: false, problem: "Save the goal first." }, caseFile };
+    const ids = Array.isArray(args.assetIds) ? args.assetIds.filter((id): id is string => typeof id === "string") : [];
+    const unknown = ids.filter((id) => !caseFile.assets.some((asset) => asset.id === id));
+    if (unknown.length > 0) {
+      const known = caseFile.assets.map((asset) => assetLabel(caseFile, asset.id)).join(", ") || "none yet";
+      return { output: { saved: false, problem: `Unknown asset ids: ${unknown.join(", ")}. Known assets: ${known}.` }, caseFile };
+    }
+    const keep = [...new Set(ids)];
+    return {
+      output: { saved: true, display: `Assets to keep: ${keep.map((id) => assetLabel(caseFile, id)).join(", ") || "none"}.` },
+      caseFile: { ...caseFile, goal: { ...caseFile.goal, keepAssetIds: keep } },
+    };
+  },
+};
+
+export function createComparePaths(registry: Registry): AgentTool {
+  return {
+    declaration: {
+      name: "compare_paths",
+      description:
+        "Compare every way to raise the cash for the saved goal and assets, and recommend one with fixed rules. " +
+        "Call it when the goal, the assets and the keep choices are covered, and again after any change. " +
+        "Quote the display text exactly; explain only with the reasons it gives.",
+      parameters: { type: "object", properties: {} },
+    },
+    stages: ["capture", "compare"],
+    requiresApproval: false,
+    run(_args, { caseFile, today, now }) {
+      const result = recommend(caseFile, registry, today, now);
+      if (result.status === "not_ready") return { output: { compared: false, problems: result.problems }, caseFile };
+      if (result.status === "needs_fresh_data") {
+        const keys = result.stale.map((item) => item.key).join(", ");
+        return {
+          output: { compared: false, status: "needs_fresh_data", display: `Needs fresh data: these values are out of date, so no recommendation can be finished: ${keys}.` },
+          caseFile: { ...caseFile, recommendation: undefined, handoff: undefined },
+        };
+      }
+      const recommendation = result.recommendation;
+      return {
+        output: {
+          compared: true,
+          chosenId: recommendation.chosenId,
+          rulesFired: recommendation.rulesFired,
+          display: describeRecommendation(recommendation).join("\n"),
+        },
+        caseFile: { ...caseFile, recommendation, handoff: undefined, stage: "compare" },
+      };
+    },
+  };
+}
+
+export function createPrepareDocuments(registry: Registry): AgentTool {
+  return {
+    declaration: {
+      name: "prepare_documents",
+      description:
+        "Prepare the handoff for the recommended path: the HEI term sheet (when the path is an HEI), an asset passport " +
+        "for each asset it uses, and the recommendation receipt with their hashes. Nothing is signed, sent or recorded " +
+        "on-chain. Quote the display text exactly.",
+      parameters: { type: "object", properties: {} },
+    },
+    stages: ["compare", "prepare"],
+    requiresApproval: false,
+    run(_args, { caseFile, now }) {
+      const recommendation = caseFile.recommendation;
+      if (!recommendation?.chosenId) return { output: { prepared: false, problem: "Compare the paths first; there is no recommended path yet." }, caseFile };
+      if (inputsChanged(caseFile)) {
+        return { output: { prepared: false, problem: "The goal or assets changed after the comparison. Call compare_paths again." }, caseFile };
+      }
+      const chosen = recommendation.options.find((option) => option.id === recommendation.chosenId);
+      if (!chosen) return { output: { prepared: false, problem: "The recommended path is missing." }, caseFile };
+
+      let file = caseFile;
+      const passports: AssetPassport[] = [];
+      for (const assetId of chosen.assetIds) {
+        const built = buildPassport(file, assetId);
+        file = built.caseFile;
+        passports.push(built.passport);
+      }
+      let termSheet: HeiTermSheet | undefined;
+      const home = file.assets.find((asset) => asset.id === chosen.assetIds[0]);
+      if (chosen.id === "re-hei" && home?.kind === "real_estate" && home.avm) {
+        termSheet = buildHeiTermSheet(
+          { assetId: home.id, valueUsd: home.avm.mid, mortgageBalanceUsd: home.mortgageBalanceUsd, valueSource: home.avm.source, valueAsOf: home.avm.asOf },
+          recommendation.inputs.goal.cashNeededUsd,
+          recommendation.inputs.horizonYears,
+          realEstateTerms(registry),
+          recommendation.registryVersion,
+        );
+      }
+      const receipt = buildReceipt(recommendation, passports, now);
+      const lines = [
+        `Prepared for: ${chosen.label}. Nothing was signed, sent or recorded on-chain.`,
+        ...(termSheet ? describeTermSheet(termSheet) : []),
+        ...passports.map((passport) => `Asset passport for ${assetLabel(file, passport.assetId)}: hash ${hashOf(passport)}.`),
+        `Recommendation receipt: recommendation hash ${receipt.recommendationHash}; passports hash ${receipt.passportHash}; parameter registry ${receipt.registryVersion}.`,
+        "Recording the receipt on Solana and issuing tokens come in a later step and need your approval and wallet signature.",
+      ];
+      return {
+        output: { prepared: true, display: lines.join("\n") },
+        caseFile: { ...file, handoff: { termSheet, passports, receipt }, stage: "prepare" },
+      };
+    },
+  };
+}
+
+/** True when the goal or the asset values differ from what the latest comparison used. */
+function inputsChanged(caseFile: CaseFile): boolean {
+  const rec = caseFile.recommendation;
+  if (!rec) return true;
+  return hashOf(rec.inputs.goal) !== hashOf(caseFile.goal) || hashOf(rec.inputs.assets) !== hashOf(assetSummaries(caseFile));
+}
+
+/** All tools so far (M6: goal, home, mortgage, watches, compare, prepare). Optional services add their tools. */
 export function createAgentTools(services: {
+  registry: Registry;
   propertySource: PropertyDataSource;
   mortgageSource?: MortgageDataSource;
   vision?: WatchVision;
@@ -456,5 +605,8 @@ export function createAgentTools(services: {
     ...(services.vision ? [createReadWatchPhotos(services.vision)] : []),
     recordWatch,
     checkWatchRegistry,
+    setKeepAssets,
+    createComparePaths(services.registry),
+    createPrepareDocuments(services.registry),
   ];
 }

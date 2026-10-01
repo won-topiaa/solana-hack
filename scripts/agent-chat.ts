@@ -1,4 +1,4 @@
-// Talk to the agent in the terminal (goal, home and watch intake so far).
+// Talk to the agent in the terminal: goal, assets, comparison and prepared documents.
 // Usage: npm run agent:chat                               interactive; type "exit" to stop
 //        npm run agent:chat -- "first message" "second"     replays the given messages
 // Needs GEMINI_API_KEY in .env.local (optional GEMINI_MODEL). The key is on the
@@ -12,6 +12,7 @@ import { createCaseFile, resolveApproval, sendUserMessage, type AgentDeps, type 
 import { addPhoto, mimeTypeFromFileName } from "../lib/agent/photos";
 import { createAgentTools } from "../lib/agent/tools";
 import { createGeminiVision } from "../lib/integrations/vision";
+import { getRegistry } from "../lib/params/load";
 import { createDemoPropertySource, createMemoryStore, createRentcastSource, withCache } from "../lib/integrations/rentcast";
 import { createFileStore } from "../lib/integrations/rentcastCache";
 import { createPlaidSandboxSource } from "../lib/integrations/plaid";
@@ -34,7 +35,12 @@ async function main() {
   const mortgageSource = clientId && secret ? createPlaidSandboxSource({ clientId, secret }) : undefined;
   const deps: AgentDeps = {
     llm: createGeminiClient({ apiKey, model }),
-    tools: createAgentTools({ propertySource, mortgageSource, vision: createGeminiVision({ apiKey, model }) }),
+    tools: createAgentTools({
+      registry: getRegistry(),
+      propertySource,
+      mortgageSource,
+      vision: createGeminiVision({ apiKey, model }),
+    }),
   };
   console.log(`Model: ${model}. Property data: ${useRentcast ? "RentCast (cached in .cache/rentcast)" : "demo data (data/demo/properties.json)"}.`);
   console.log(`Mortgage: typed by the user${mortgageSource ? ", or Plaid sandbox (test data) after approval" : ""}.`);

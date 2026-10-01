@@ -39,7 +39,7 @@ export type WatchAsset = {
 export type Asset = RealEstateAsset | WatchAsset;
 
 export type PiiItem =
-  | { kind: "address" | "person_name"; value: string }
+  | { kind: "address" | "person_name"; value: string; salt?: string } // salt: for the passport's address hash
   // The salt keeps the published serial hash from being reversed by trying every serial.
   | { kind: "serial"; value: string; salt: string };
 
