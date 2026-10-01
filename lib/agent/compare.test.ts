@@ -62,3 +62,48 @@ describe("compare and prepare, through the agent", () => {
     expect(JSON.stringify(llm.requests.at(-1)?.messages.at(-1))).toContain("Unknown asset ids: watch-9");
   });
 });
+
+describe("the user chooses a path", () => {
+  it("asks for a choice when both assets work, then prepares the one the user picked", async () => {
+    const llm = createScriptedLlm([
+      callTool("compare_paths"),
+      say("Both work. Which asset do you want to use?"),
+      callTool("prepare_documents"),
+      callTool("prepare_documents", { optionId: "watch-plan" }),
+      say("Prepared."),
+    ]);
+    const deps = { llm, tools, now };
+    const compared = await sendUserMessage(personaCase("D", now()), "Compare.", deps);
+    expect(compared.caseFile.recommendation?.chosenId).toBeNull();
+
+    const prepared = await sendUserMessage(compared.caseFile, "Use my watches.", deps);
+    expect(JSON.stringify(llm.requests[3].messages.at(-1))).toContain("Ask the user which path they want");
+    expect(prepared.caseFile.handoff?.receipt).toMatchObject({ recommendedOptionId: null, selectedOptionId: "watch-plan" });
+    expect(prepared.caseFile.handoff?.passports.map((passport) => passport.assetId)).toEqual(["watch-1", "watch-2"]);
+  });
+
+  it("lets a watch owner tokenize the watch instead of the recommendation, and records both", async () => {
+    const llm = createScriptedLlm([
+      callTool("compare_paths"),
+      say("Compared."),
+      callTool("prepare_documents", { optionId: "w-vault-token-watch-1" }),
+      say("Prepared."),
+    ]);
+    const deps = { llm, tools, now };
+    const compared = await sendUserMessage(personaCase("A", now()), "Compare.", deps);
+    const prepared = await sendUserMessage(compared.caseFile, "I want to tokenize my sport watch.", deps);
+    expect(prepared.caseFile.handoff?.receipt).toMatchObject({ recommendedOptionId: "watch-plan", selectedOptionId: "w-vault-token-watch-1" });
+    const text = JSON.stringify(llm.requests.at(-1)?.messages.at(-1));
+    expect(text).toContain("Prepared for the path you chose: Vault Demo Diver 300 and issue a 1-of-1 token.");
+    expect(text).toContain("Token design: a 1-of-1 token");
+  });
+
+  it("refuses a path that does not fit, such as a loan over the monthly budget", async () => {
+    const llm = createScriptedLlm([callTool("compare_paths"), say("Compared."), callTool("prepare_documents", { optionId: "re-heloc" }), say("That one does not fit.")]);
+    const deps = { llm, tools, now };
+    const compared = await sendUserMessage(personaCase("B", now()), "Compare.", deps);
+    const refused = await sendUserMessage(compared.caseFile, "Prepare the HELOC.", deps);
+    expect(refused.caseFile.handoff).toBeUndefined();
+    expect(JSON.stringify(llm.requests.at(-1)?.messages.at(-1))).toContain("cannot be prepared");
+  });
+});

@@ -6,8 +6,12 @@ import type { AssetPassport, Receipt } from "../recommend/passport";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import type { Recommendation } from "../recommend/types";
 
+/** Which asset the user came to use: home and watches are separate situations (owner, 2026-10-02). */
+export type Intent = "home" | "watch" | "unsure";
+
 /** CLAUDE.md §9. keepAssetIds is filled once assets are captured (step 2). */
 export type Goal = {
+  intent?: Intent; // missing = unsure
   cashNeededUsd: number;
   neededBy: string; // YYYY-MM-DD
   repayHorizonYears?: number;

@@ -84,10 +84,41 @@ export function watchLoanOption(watch: WatchInput, category: WatchCategory, term
   };
 }
 
+/**
+ * The watch's tokenization path (PLAN §6.1): authenticate, vault, issue a 1-of-1 token.
+ * It raises no cash by itself, so the rules never pick it, but the user may choose it.
+ */
+export function vaultTokenOption(watch: WatchInput): PathOption {
+  return {
+    id: `w-vault-token-${watch.assetId}`,
+    lane: "watch",
+    label: `Vault ${watch.label} and issue a 1-of-1 token`,
+    assetIds: [watch.assetId],
+    cashNowUsd: 0,
+    keepsAsset: true,
+    timeToCash: "After authentication and vault intake (simulated in this demo); cash only when the token is sold or borrowed against",
+    risks: [
+      "No cash by itself: cash comes only from selling the token or borrowing against it.",
+      "Vault and token fees are not published (simulated in this demo).",
+      "Redeeming the token takes the watch back out of the vault.",
+    ],
+    informational: true,
+    suitable: false,
+    whyNotSuitable: "Raises no cash by itself; choose it if you want to tokenize the watch.",
+    usedParamKeys: [],
+  };
+}
+
 /** Every single path for one watch, for the comparison table. */
 export function allWatchOptions(watch: WatchInput, terms: WatchTerms): PathOption[] {
   const options = [dealerOption(watch, terms), marketplaceOption(watch, terms)];
-  return watch.category ? [...options, watchLoanOption(watch, watch.category, terms)] : options;
+  const loan = watch.category ? [watchLoanOption(watch, watch.category, terms)] : [];
+  return [...options, ...loan, vaultTokenOption(watch)];
+}
+
+/** Paths the user may choose to prepare: suitable ones, plus the tokenization paths. */
+export function isSelectable(option: PathOption): boolean {
+  return option.suitable || option.id.startsWith("w-vault-token-");
 }
 
 export type WatchTiming = { daysUntilNeeded: number; horizonDays: number; urgentDays: number };

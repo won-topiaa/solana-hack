@@ -19,6 +19,8 @@ export type AssetPassport = {
 };
 
 export type Receipt = {
+  recommendedOptionId: string | null; // what the rules picked (null: the user had to choose)
+  selectedOptionId: string; // what the user chose to prepare; may differ from the recommendation
   recommendationHash: string;
   passportHash: string; // hash of the sorted list of passport hashes
   registryVersion: string;
@@ -82,8 +84,15 @@ export function buildPassport(caseFile: CaseFile, assetId: string): { caseFile: 
   };
 }
 
-export function buildReceipt(recommendation: Recommendation, passports: AssetPassport[], now: Date): Receipt {
+export function buildReceipt(
+  recommendation: Recommendation,
+  passports: AssetPassport[],
+  now: Date,
+  selectedOptionId: string,
+): Receipt {
   return {
+    recommendedOptionId: recommendation.chosenId,
+    selectedOptionId,
     recommendationHash: hashOf(recommendation),
     passportHash: hashOf(passports.map((passport) => hashOf(passport)).sort()),
     registryVersion: recommendation.registryVersion,

@@ -1,49 +1,124 @@
 {
-  "note": "Made-up personas for demos and tests (PLAN §11). Their expected recommendations are listed in CLAUDE.md §8.6. Watch prices come from data/demo/watch-prices.json.",
+  "note": "Made-up personas for demos and tests (PLAN \u00a711). Each goal has an intent (home, watch or unsure). Their expected recommendations are listed in CLAUDE.md \u00a78.6. Watch prices come from data/demo/watch-prices.json.",
   "today": "2026-10-01",
   "home": {
     "address": "742 Demo Lane, Exampleville, CA 99999",
-    "avm": { "low": 930000, "mid": 1000000, "high": 1070000, "source": "Demo data (simulated RentCast response)", "asOf": "2026-10-01" },
+    "avm": {
+      "low": 930000,
+      "mid": 1000000,
+      "high": 1070000,
+      "source": "Demo data (simulated RentCast response)",
+      "asOf": "2026-10-01"
+    },
     "mortgageBalanceUsd": 400000,
     "ownerMatch": "match",
     "ownerOccupied": true
   },
   "watches": {
-    "watch-1": { "maker": "Demo Watch Co.", "model": "Demo Diver 300", "reference": "DEMO-300", "hasBox": true, "hasPapers": true },
-    "watch-2": { "maker": "Demo Watch Co.", "model": "Demo Dress 38 Gold", "reference": "DEMO-38G", "hasBox": false, "hasPapers": true }
+    "watch-1": {
+      "maker": "Demo Watch Co.",
+      "model": "Demo Diver 300",
+      "reference": "DEMO-300",
+      "hasBox": true,
+      "hasPapers": true
+    },
+    "watch-2": {
+      "maker": "Demo Watch Co.",
+      "model": "Demo Dress 38 Gold",
+      "reference": "DEMO-38G",
+      "hasBox": false,
+      "hasPapers": true
+    }
   },
   "personas": [
     {
       "id": "A",
       "title": "Needs $30,000 by tomorrow, owns two watches, keeps the sport watch",
-      "goal": { "cashNeededUsd": 30000, "neededBy": "2026-10-02", "repayHorizonYears": 0.25 },
+      "goal": {
+        "intent": "watch",
+        "cashNeededUsd": 30000,
+        "neededBy": "2026-10-02",
+        "repayHorizonYears": 0.25
+      },
       "home": false,
-      "watches": ["watch-1", "watch-2"],
-      "keep": ["watch-1"]
+      "watches": [
+        "watch-1",
+        "watch-2"
+      ],
+      "keep": [
+        "watch-1"
+      ]
     },
     {
       "id": "B",
       "title": "Homeowner who needs $150,000, repays in 10 years, cannot make monthly payments",
-      "goal": { "cashNeededUsd": 150000, "neededBy": "2026-11-30", "repayHorizonYears": 10, "monthlyCapacityUsd": 0, "age62Plus": false },
+      "goal": {
+        "intent": "home",
+        "cashNeededUsd": 150000,
+        "neededBy": "2026-11-30",
+        "repayHorizonYears": 10,
+        "monthlyCapacityUsd": 0,
+        "age62Plus": false
+      },
       "home": true,
       "watches": [],
-      "keep": ["home-1"]
+      "keep": [
+        "home-1"
+      ]
     },
     {
       "id": "B2",
       "title": "Same homeowner, repays in 2 years, can pay $1,000 a month",
-      "goal": { "cashNeededUsd": 150000, "neededBy": "2026-11-30", "repayHorizonYears": 2, "monthlyCapacityUsd": 1000, "age62Plus": false },
+      "goal": {
+        "intent": "home",
+        "cashNeededUsd": 150000,
+        "neededBy": "2026-11-30",
+        "repayHorizonYears": 2,
+        "monthlyCapacityUsd": 1000,
+        "age62Plus": false
+      },
       "home": true,
       "watches": [],
-      "keep": ["home-1"]
+      "keep": [
+        "home-1"
+      ]
     },
     {
       "id": "C",
-      "title": "Owns the home and both watches, needs $40,000 for about 3 months, keeps the home and the sport watch",
-      "goal": { "cashNeededUsd": 40000, "neededBy": "2026-10-15", "repayHorizonYears": 0.25, "monthlyCapacityUsd": 500 },
+      "title": "Not sure what to use: owns the home and both watches, needs $40,000 for about 3 months, keeps the home and the sport watch",
+      "goal": {
+        "intent": "unsure",
+        "cashNeededUsd": 40000,
+        "neededBy": "2026-10-15",
+        "repayHorizonYears": 0.25,
+        "monthlyCapacityUsd": 500
+      },
       "home": true,
-      "watches": ["watch-1", "watch-2"],
-      "keep": ["home-1", "watch-1"]
+      "watches": [
+        "watch-1",
+        "watch-2"
+      ],
+      "keep": [
+        "home-1",
+        "watch-1"
+      ]
+    },
+    {
+      "id": "D",
+      "title": "Not sure what to use: owns the home and both watches, needs $30,000 within a month, keeps nothing",
+      "goal": {
+        "intent": "unsure",
+        "cashNeededUsd": 30000,
+        "neededBy": "2026-10-31",
+        "repayHorizonYears": 0.25,
+        "monthlyCapacityUsd": 500
+      },
+      "home": true,
+      "watches": [
+        "watch-1",
+        "watch-2"
+      ],
+      "keep": []
     }
   ]
 }

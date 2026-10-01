@@ -79,20 +79,68 @@ describe("persona B2: same home, repays in 2 years, $1,000 a month", () => {
   });
 });
 
-describe("persona C: home and two watches, $40,000 for 3 months", () => {
+describe("persona C: not sure, home and two watches, $40,000 for 3 months", () => {
   const rec = recommendationFor("C");
 
-  it("uses the watches first and a HELOC for the rest (W-3, W-2, X-1, RE-1)", () => {
-    expect(rec.chosenId).toBe("cross-plan");
-    expect(rec.rulesFired).toEqual(["W-3", "W-2", "X-1", "RE-1"]);
-    const cross = option(rec, "cross-plan");
-    expect(cross.cashNowUsd).toBeCloseTo(40_000, 2);
-    expect(cross.parts?.map((part) => part.label)).toEqual([
-      "Loan against Demo Diver 300",
-      "Sell Demo Dress 38 Gold on a marketplace",
-      "HELOC of $7,225",
-    ]);
-    expect(cross.monthlyPaymentUsd).toBeCloseTo(42.69, 2);
+  it("judges each asset on its own and recommends the home, which covers the goal alone (RE-1)", () => {
+    expect(rec.intent).toBe("unsure");
+    expect(rec.laneChoices).toEqual({ real_estate: "re-heloc", watch: null });
+    expect(rec.chosenId).toBe("re-heloc");
+    expect(rec.rulesFired).toEqual(["RE-1", "W-3", "W-2"]);
+  });
+
+  it("does not combine the lanes when one of them works alone", () => {
+    expect(rec.options.some((option) => option.id === "cross-plan")).toBe(false);
+    expect(rec.reasons.join(" ")).toContain("Your watches alone fall short");
+  });
+});
+
+describe("persona D: not sure, both the home and the watches can cover $30,000", () => {
+  const rec = recommendationFor("D");
+
+  it("shows the best path for each asset and lets the user choose", () => {
+    expect(rec.laneChoices).toEqual({ real_estate: "re-heloc", watch: "watch-plan" });
+    expect(rec.chosenId).toBeNull();
+    expect(rec.rulesFired).toEqual(["RE-1", "W-2"]);
+    const lines = describeRecommendation(rec);
+    expect(lines).toContain("Best path using your home: HELOC of $30,000.");
+    expect(lines).toContain("Best path using your watches: Sell Demo Diver 300 on a marketplace + Sell Demo Dress 38 Gold on a marketplace.");
+    expect(lines).toContain("Both work: choose which asset you want to use.");
+  });
+});
+
+describe("intent picks the lane: home and watches are separate situations", () => {
+  function withGoal(id: string, change: Record<string, unknown>) {
+    const base = personaCase(id, now);
+    return { ...base, goal: { ...base.goal!, ...change } };
+  }
+
+  it("a user who came for the home sees only home paths", () => {
+    const result = recommend(withGoal("C", { intent: "home" }), testRegistry(), TODAY, now);
+    expect(result.status === "ok" && result.recommendation.options.every((option) => option.lane === "real_estate")).toBe(true);
+  });
+
+  it("a user who came for a watch sees only watch paths", () => {
+    const result = recommend(withGoal("C", { intent: "watch" }), testRegistry(), TODAY, now);
+    expect(result.status === "ok" && result.recommendation.options.every((option) => option.lane === "watch")).toBe(true);
+  });
+
+  it("combines watches and a HELOC (X-1) only when neither asset covers the goal alone", () => {
+    // $260,000 is too much for an HEI on this home, and the full HELOC payment is over the $1,400 budget.
+    const result = recommend(withGoal("C", { cashNeededUsd: 260_000, monthlyCapacityUsd: 1_400 }), testRegistry(), TODAY, now);
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.recommendation.laneChoices).toEqual({ real_estate: null, watch: null });
+    expect(result.recommendation.chosenId).toBe("cross-plan");
+    expect(result.recommendation.rulesFired).toContain("X-1");
+  });
+});
+
+describe("watch tokenization path", () => {
+  it("is listed for each watch, raises no cash itself, and is never picked by the rules", () => {
+    const rec = recommendationFor("A");
+    const token = rec.options.find((option) => option.id === "w-vault-token-watch-2");
+    expect(token).toMatchObject({ cashNowUsd: 0, suitable: false, label: "Vault Demo Dress 38 Gold and issue a 1-of-1 token" });
+    expect(rec.chosenId).not.toBe("w-vault-token-watch-2");
   });
 });
 

@@ -76,7 +76,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 
 | Step | What the agent does | Tools / data | Output |
 |---|---|---|---|
-| 1 Goal | Ask: cash needed, deadline, planned repayment horizon, assets to keep, monthly payment capacity, age 62+? | chat | `Goal` |
+| 1 Goal | Ask: which asset to use or tokenize (home / watch / not sure), cash needed, deadline, planned repayment horizon, assets to keep, monthly payment capacity, age 62+? | chat | `Goal` |
 | 2 Capture | Address, camera (home interior; watch reference/serial/box/papers), documents, Plaid (mortgage data), wallet; or "recommend for me" mode | multimodal LLM, Plaid Liabilities | `Asset[]` |
 | 3 Verify | Owner/tax/sale history; watch theft check (simulated in MVP); schedule partner appraisal/authentication | RentCast, The Watch Register (simulated) | verification log |
 | 4 Value | Home: AVM range + error band. Watch: price table + box/papers note | RentCast, `data/params.json` | `Valuation` |
@@ -151,7 +151,7 @@ Inputs: home value `V`, net cash `C`, discount `d`, fee rate `phi`, cap `cap`.
 - W-1: cash needed within ~1 day and willing to sell -> dealer instant offer.
 - W-2: can wait, wants the highest price -> marketplace.
 - W-3: wants the watch back and horizon <= 180 days -> watch loan.
-- X-1: if keep-constraints prevent one lane from reaching the goal -> propose combinations across lanes.
+- X-1: only for users unsure which asset to use, and only when neither lane reaches the goal alone -> watches plus a HELOC for the rest (owner, 2026-10-02: home and watches are separate situations).
 
 ### 8.5 Test vectors (must match)
 Real estate (`V=1,000,000`, `C=150,000`, `d=1/3`, `phi=0.039`, `cap=0.20`):
@@ -191,7 +191,8 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 - Watch loan: no cost number (rates not published). Refinance: not compared. Reverse mortgage: information only, 62+ (RE-3).
 - A path is suitable when it reaches the goal, does not sell a kept asset, its monthly payment fits the budget, and (HEI) it is eligible.
 - Watch rules: kept and `t` ≤ longest watch-loan term (180 days) → loan (W-3); not kept and needed within `watch_dealer_urgent_days` (1) → dealer (W-1); otherwise not kept → marketplace (W-2). Plan: loans first, then sales from the largest, until the goal.
-- Lane order (provisional, owner to confirm): if `t` ≤ 180 days, watches first and a HELOC covers any shortfall (X-1); otherwise the home lane.
+- Intent (owner, 2026-10-02): home and watches are separate situations. The goal records `intent` (home / watch / unsure). home or watch → only that lane is compared and recommended. unsure → each lane is judged alone: exactly one works → recommend it; both work → the user chooses (`chosenId` null, best path per lane shown); neither → X-1.
+- Each watch also has a tokenization path (vault + 1-of-1 token, PLAN §6.1): no cash by itself, never picked by the rules, but the user may choose it. The user may choose any suitable path or a tokenization path; the receipt records `recommendedOptionId` and `selectedOptionId`.
 - Home lane: `t` ≤ 3 years and an affordable loan → the cheaper of HELOC / home equity loan (RE-1); else budget below the HELOC payment → HEI (RE-2); else the lowest total cost (provisional).
 - No recommendation is finished if any registry value behind the shown numbers is stale (M2 gate).
 - Receipt = hashes of the canonical JSON of the recommendation and of the asset passports, plus the registry version. Identifiers in passports are salted hashes (salt stays off-chain).
@@ -201,17 +202,19 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 | Home equity loan 150,000 at 7.42%, 10 years | 1,774.27/month; interest 62,912.37 |
 | Home equity loan 150,000 at 7.42%, 2 years | 6,744.48/month |
 | CLTV 400,000 + 150,000 on 1,000,000 | 55% |
-| Persona A (2 watches, 30,000 by tomorrow, keep sport watch) | loan on A + dealer sale of B, 29,250–32,250; rules W-3, W-1; B must bring ≥ 75% |
-| Persona B (home, 150,000, 10 years, budget 0) | HEI; rule RE-2; pay 234,131 flat (4.55%/yr) or 314,652 at +3%/yr (7.69%/yr) |
-| Persona B2 (home, 150,000, 2 years, budget 1,000) | HELOC; rule RE-1; interest 21,270; home equity loan 6,744/month is over budget |
-| Persona C (home + 2 watches, 40,000, 3 months, budget 500) | loan on A + marketplace sale of B + HELOC 7,225; rules W-3, W-2, X-1, RE-1 |
+| Persona A (watch; 2 watches, 30,000 by tomorrow, keep sport watch) | loan on A + dealer sale of B, 29,250–32,250; rules W-3, W-1; B must bring ≥ 75% |
+| Persona B (home; 150,000, 10 years, budget 0) | HEI; rule RE-2; pay 234,131 flat (4.55%/yr) or 314,652 at +3%/yr (7.69%/yr) |
+| Persona B2 (home; 150,000, 2 years, budget 1,000) | HELOC; rule RE-1; interest 21,270; home equity loan 6,744/month is over budget |
+| Persona C (unsure; home + 2 watches, 40,000, 3 months, budget 500, keeps home and A) | HELOC (the home covers it alone; the watches fall short); rules RE-1, W-3, W-2; no combination |
+| Persona D (unsure; home + 2 watches, 30,000 within a month, budget 500, keeps nothing) | both work → the user chooses: HELOC, or sell both watches on a marketplace; rules RE-1, W-2 |
+| Persona C with 260,000 and budget 1,400 | neither works alone → watches + HELOC (X-1) |
 
 ---
 
 ## 9. Data contracts (draft)
 
 ```ts
-type Goal = { cashNeededUsd: number; neededBy: string; repayHorizonYears?: number;
+type Goal = { intent?: 'home' | 'watch' | 'unsure'; cashNeededUsd: number; neededBy: string; repayHorizonYears?: number;
   keepAssetIds: string[]; keepAssetNotes?: string[]; // notes = user's words until assets have IDs
   monthlyCapacityUsd?: number; age62Plus?: boolean };
 // CaseFile (lib/agent/types.ts): { id, createdAt, stage, goal?, assets, pii, messages, pendingApproval, events }
@@ -236,7 +239,8 @@ type Recommendation = { chosenId: string; options: PathOption[]; rulesFired: str
   registryVersion: string; createdAt: string };
 type AssetPassport = { assetId: string; kind: string; identifierHashes: Record<string, string>;
   evidenceHashes: string[]; valuation: unknown; approvals: { signer: string; at: string }[] };
-type Receipt = { recommendationHash: string; passportHash: string; registryVersion: string; txId?: string };
+type Receipt = { recommendedOptionId: string | null; selectedOptionId: string; recommendationHash: string;
+  passportHash: string; registryVersion: string; createdAt: string; txId?: string };
 ```
 
 ---

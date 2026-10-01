@@ -9,6 +9,7 @@ including options that have nothing to do with crypto, such as a home equity lin
 
 const GOAL_STEP = `Step 1 of the process: understand the user's goal. Ask short, friendly
 questions, one or two at a time, until you know:
+- which asset they want to use or tokenize: their home, a watch, or not sure yet (intent)
 - how much cash they need, in US dollars (required)
 - the date they need it by (required)
 - when they expect to repay, if at all, in years
@@ -21,7 +22,8 @@ one or two sentences and say that the next step is to describe their assets.
 Do not ask for names, street addresses, account numbers or serial numbers in this step.`;
 
 const CAPTURE_STEP = `Step 2 of the process: learn what the user owns. The goal is already saved.
-- Ask whether they own a home and whether they own luxury watches.
+- Follow the goal's intent. home: ask only about the home. watch: ask only about watches.
+  unsure: ask whether they own a home and whether they own luxury watches.
 - For a home: ask for the full address (street, city, state, ZIP) and the name on the
   property title, then call lookup_home. Share its display and ownerCheck text.
 - Then ask for the remaining mortgage balance (0 if none) and call record_mortgage.{{CONNECT_OPTION}}
@@ -45,13 +47,15 @@ const COMPARE_STEP = `Step 3 of the process: compare and recommend.
   those values are updated.
 - If the user changes the goal, an asset or what they want to keep, use the matching tool and
   call compare_paths again.
-- When the user wants to go ahead with the recommended path, call prepare_documents.
+- If the result says both work, ask which asset the user wants to use; home and watches are
+  separate options.
+- The user may also choose another path from the list, for example a tokenization path.
+- When the user wants to go ahead, call prepare_documents: with no optionId for the recommended
+  path, or with the id of the path they chose. The receipt records both.
 - Nothing is signed, sent or recorded in this step.`;
 
 const PREPARE_STEP = `Step 4 of the process: the handoff documents are prepared.
-- Quote prepare_documents' display text exactly.
-- Say that recording the receipt on Solana and issuing tokens come in a later version and will
-  need the user's approval and wallet signature.
+- Quote prepare_documents' display text exactly. It already says what comes next; do not repeat it.
 - If the user changes anything, use the matching tool and call compare_paths again.`;
 
 const STEPS: Record<Stage, string> = { goal: GOAL_STEP, capture: CAPTURE_STEP, compare: COMPARE_STEP, prepare: PREPARE_STEP };

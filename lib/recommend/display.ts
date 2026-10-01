@@ -29,7 +29,7 @@ function costText(option: PathOption, years: number): string {
 
 export function describeOption(option: PathOption, years: number): string {
   if (option.informational && option.cashNowUsd === 0) {
-    return `${option.label}: for information. ${option.risks.join(" ")}`;
+    return `${option.label}: ${option.risks.join(" ")} (id: ${option.id})`;
   }
   const parts = [`${cashText(option)} now`];
   if (option.monthlyPaymentUsd === 0) parts.push("no monthly payments");
@@ -37,18 +37,30 @@ export function describeOption(option: PathOption, years: number): string {
   parts.push(costText(option, years));
   parts.push(option.keepsAsset ? "you keep the asset" : "you give up the asset");
   const line = `${option.label}: ${parts.join("; ")}.`;
-  return option.suitable ? line : `${line} Not suitable: ${option.whyNotSuitable}`;
+  const verdict = option.suitable ? "" : ` Not suitable: ${option.whyNotSuitable}`;
+  return `${line}${verdict} (id: ${option.id})`;
 }
 
 export function describeRecommendation(recommendation: Recommendation): string[] {
   const years = recommendation.inputs.horizonYears;
-  const chosen = recommendation.options.find((option) => option.id === recommendation.chosenId);
+  const byId = (id: string | null | undefined) => recommendation.options.find((option) => option.id === id);
+  const chosen = byId(recommendation.chosenId);
+  const lanes = recommendation.laneChoices;
+  const bothLanesWork = Boolean(lanes.real_estate && lanes.watch);
   const lines = [
     `Every path compared for ${formatUsd(recommendation.inputs.goal.cashNeededUsd)} by ${recommendation.inputs.goal.neededBy}:`,
     ...recommendation.options.map((option, index) => `${index + 1}. ${describeOption(option, years)}`),
-    chosen ? `Recommended: ${chosen.label}.` : "No path reaches the goal yet.",
-    `Why: ${recommendation.reasons.join(" ")}`,
   ];
+  if (recommendation.intent === "unsure" && "real_estate" in lanes && "watch" in lanes) {
+    lines.push(
+      `Best path using your home: ${byId(lanes.real_estate)?.label ?? "none reaches the goal"}.`,
+      `Best path using your watches: ${byId(lanes.watch)?.label ?? "none reaches the goal"}.`,
+    );
+  }
+  lines.push(
+    chosen ? `Recommended: ${chosen.label}.` : bothLanesWork ? "Both work: choose which asset you want to use." : "No path reaches the goal yet.",
+    `Why: ${recommendation.reasons.join(" ")}`,
+  );
   if (chosen) lines.push(`Main risks: ${chosen.risks.join(" ")}`);
   lines.push(
     `Rules applied: ${recommendation.rulesFired.join(", ") || "none"}. Values from parameter registry ${recommendation.registryVersion}.`,

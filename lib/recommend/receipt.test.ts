@@ -30,8 +30,10 @@ describe("recommendation receipt", () => {
 
   it("records the registry version and hashes of the passports", () => {
     const { passport } = buildPassport(caseB, "home-1");
-    const receipt = buildReceipt(rec, [passport], now);
+    const receipt = buildReceipt(rec, [passport], now, "re-hei");
     expect(receipt).toEqual({
+      recommendedOptionId: "re-hei",
+      selectedOptionId: "re-hei",
       recommendationHash: hashOf(rec),
       passportHash: hashOf([hashOf(passport)]),
       registryVersion: "2026-10-01.3",

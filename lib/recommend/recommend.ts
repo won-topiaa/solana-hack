@@ -1,8 +1,8 @@
 // Builds every path for the user's goal and assets, picks one with the rules of
 // CLAUDE.md §8.4, and refuses to finish when a value it used is stale (M2 gate).
-// Lane order (CLAUDE.md §8.6): when the repayment horizon fits within the longest
-// watch-loan term, watches go first and the home covers any shortfall (X-1);
-// otherwise the home lane decides.
+// Home and watches are separate situations (owner, 2026-10-02): the user's intent
+// picks the lane. When unsure, each lane is judged on its own; both working means
+// the user chooses, and only when neither works alone are they combined (X-1).
 
 import type { CaseFile } from "../agent/types";
 import type { RealEstateAsset, WatchAsset } from "../assets/types";
@@ -40,7 +40,8 @@ function valuedAssets(caseFile: CaseFile): { home?: RealEstateAsset; watches: Wa
 /** What the comparison used about each asset: values and sources only, no personal data. */
 export function assetSummaries(caseFile: CaseFile): AssetSummary[] {
   const { home, watches } = valuedAssets(caseFile);
-  return summarize(home, watches);
+  const intent = caseFile.goal?.intent ?? "unsure";
+  return summarize(intent === "watch" ? undefined : home, intent === "home" ? [] : watches);
 }
 
 function summarize(home: RealEstateAsset | undefined, watches: WatchAsset[]): AssetSummary[] {
@@ -98,9 +99,14 @@ function cheapest(options: PathOption[]): PathOption {
 export function recommend(caseFile: CaseFile, registry: Registry, today: string, now: Date): RecommendationResult {
   const goal = caseFile.goal;
   if (!goal) return { status: "not_ready", problems: ["The goal is not saved yet."] };
-  const { home, watches } = valuedAssets(caseFile);
+  const intent = goal.intent ?? "unsure";
+  const valued = valuedAssets(caseFile);
+  // Home and watches are separate situations: use only the lane the user came for.
+  const home = intent === "watch" ? undefined : valued.home;
+  const watches = intent === "home" ? [] : valued.watches;
   if (!home && watches.length === 0) {
-    return { status: "not_ready", problems: ["No asset has a value yet: look up the home, or add a watch whose reference is in the price table."] };
+    const missing = intent === "home" ? "Look up the home first." : intent === "watch" ? "Add a watch whose reference is in the price table first." : "No asset has a value yet.";
+    return { status: "not_ready", problems: [missing] };
   }
 
   const settings = comparisonTerms(registry);
@@ -118,74 +124,81 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
   const options: PathOption[] = [];
   const rulesFired: string[] = [];
   const reasons: string[] = [];
+  const laneChoices: { real_estate?: string | null; watch?: string | null } = {};
 
-  // Home lane: every home path for the full amount.
+  // Home lane: every home path for the full amount, then rules RE-1..RE-3.
   let homeInput: HomeInput | undefined;
-  let homePaths: { heloc: PathOption; loan: PathOption; hei: PathOption } | undefined;
+  let homeChoice: PathOption | null = null;
   if (home?.avm) {
     homeInput = { assetId: home.id, valueUsd: home.avm.mid, mortgageBalanceUsd: home.mortgageBalanceUsd };
-    homePaths = {
+    const paths = {
       heloc: withBudget(helocOption("re-heloc", homeInput, need, years, reTerms)),
       loan: withBudget(homeEquityLoanOption(homeInput, need, years, reTerms)),
       hei: heiOption(homeInput, need, years, reTerms),
     };
-    options.push(homePaths.heloc, homePaths.loan, homePaths.hei);
+    options.push(paths.heloc, paths.loan, paths.hei);
     if (goal.age62Plus) {
       options.push(reverseMortgageOption(homeInput));
       rulesFired.push("RE-3");
     }
+    homeChoice = chooseHomePath(paths, years, budget, settings.helocFirstYears, settings.heiGrowthScenarios, rulesFired, reasons);
+    laneChoices.real_estate = homeChoice?.id ?? null;
   }
 
-  // Watch lane: every single path, then the plan the W rules make.
-  const watchInputs: WatchInput[] = watches.map((watch) => ({
-    assetId: watch.id,
-    label: watchLabel(watch),
-    valueUsd: watch.marketValue?.usd ?? 0,
-    category: watch.category,
-    kept: kept.has(watch.id),
-  }));
-  for (const watch of watchInputs) options.push(...allWatchOptions(watch, watchT));
-  const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: years * 365, urgentDays: settings.dealerUrgentDays };
-  const { plan, rules: watchRules } = watchPlan(watchInputs, need, timing, watchT);
-  if (plan?.parts) options.push(plan);
-
-  let chosen: PathOption | null = null;
-  const watchesFirst = plan !== null && (!homeInput || timing.horizonDays <= watchT.loanTermDays.max);
-  if (plan && watchesFirst) {
-    rulesFired.push(...watchRules);
-    const high = plan.cashRangeUsd?.high ?? plan.cashNowUsd;
-    const note = goalNote(plan, need);
-    if (high >= need) {
-      chosen = plan;
-      reasons.push(`Your watches can cover the goal within the watch-loan term while you keep the watches you chose to keep (rules ${watchRules.join(", ")}).`);
+  // Watch lane: every single path, then the plan rules W-1..W-3 make.
+  let plan: PathOption | null = null;
+  let watchChoice: PathOption | null = null;
+  if (watches.length > 0) {
+    const watchInputs: WatchInput[] = watches.map((watch) => ({
+      assetId: watch.id,
+      label: watchLabel(watch),
+      valueUsd: watch.marketValue?.usd ?? 0,
+      category: watch.category,
+      kept: kept.has(watch.id),
+    }));
+    for (const watch of watchInputs) options.push(...allWatchOptions(watch, watchT));
+    const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: years * 365, urgentDays: settings.dealerUrgentDays };
+    const result = watchPlan(watchInputs, need, timing, watchT);
+    plan = result.plan;
+    if (plan?.parts) options.push(plan);
+    rulesFired.push(...result.rules);
+    const high = plan ? plan.cashRangeUsd?.high ?? plan.cashNowUsd : 0;
+    if (plan && high >= need) {
+      watchChoice = plan;
+      reasons.push(`Your watches can cover the goal while you keep the watches you chose to keep (rules ${result.rules.join(", ")}).`);
+      const note = goalNote(plan, need);
       if (note) reasons.push(note);
+    } else if (plan) {
+      reasons.push(`Your watches alone fall short: ${goalNote(plan, need)}`);
+    } else {
+      reasons.push(`The watches you want to keep cannot be used: watch loans last at most ${watchT.loanTermDays.max} days.`);
     }
-    // X-1: the watches fall short (at least at the lowest offers), so the home covers the rest.
-    if (homeInput && plan.cashNowUsd < need) {
-      const shortfall = need - plan.cashNowUsd;
-      const helocPart = withBudget(helocOption("x-heloc", homeInput, shortfall, years, reTerms));
-      const cross: PathOption = {
-        ...combineOptions("cross-plan", "cross", [...(plan.parts ?? [plan]), helocPart]),
-        suitable: helocPart.suitable,
-        whyNotSuitable: helocPart.whyNotSuitable,
-      };
-      options.push(cross);
-      rulesFired.push("X-1");
-      if (!chosen && cross.suitable) {
-        chosen = cross;
-        reasons.push(`Your watches bring ${formatUsd(plan.cashNowUsd)} at the lowest offers, so a HELOC covers the remaining ${formatUsd(shortfall)} (rule X-1).`);
-        if (years <= settings.helocFirstYears) rulesFired.push("RE-1");
-      } else if (chosen) {
-        reasons.push(`If the offers come in low, a HELOC of up to ${formatUsd(shortfall)} could cover the rest (rule X-1).`);
-      }
-    }
-    if (!chosen && note) reasons.push(note);
-  } else if (homePaths) {
-    chosen = chooseHomePath(homePaths, years, budget, settings.helocFirstYears, settings.heiGrowthScenarios, rulesFired, reasons);
-  } else {
-    reasons.push("The watches you want to keep cannot be used: watch loans last at most " + `${watchT.loanTermDays.max} days.`);
+    laneChoices.watch = watchChoice?.id ?? null;
   }
-  if (!chosen) reasons.push("No path reaches the goal with the choices made so far.");
+
+  // Which path to recommend: the lane the user came for; if unsure, the lane that works.
+  let chosen: PathOption | null = intent === "home" ? homeChoice : intent === "watch" ? watchChoice : homeChoice ?? watchChoice;
+  if (intent === "unsure" && homeChoice && watchChoice) {
+    chosen = null;
+    reasons.push("Both your home and your watches can cover the goal. They are separate options, so choose which asset you want to use.");
+  }
+  // X-1, only when unsure and neither lane reaches the goal alone: watches first, a HELOC for the rest.
+  if (intent === "unsure" && !homeChoice && !watchChoice && plan && homeInput && plan.cashNowUsd < need) {
+    const shortfall = need - plan.cashNowUsd;
+    const helocPart = withBudget(helocOption("x-heloc", homeInput, shortfall, years, reTerms));
+    const cross: PathOption = {
+      ...combineOptions("cross-plan", "cross", [...(plan.parts ?? [plan]), helocPart]),
+      suitable: helocPart.suitable,
+      whyNotSuitable: helocPart.whyNotSuitable,
+    };
+    options.push(cross);
+    rulesFired.push("X-1");
+    if (cross.suitable) {
+      chosen = cross;
+      reasons.push(`Neither asset covers the goal alone, so the watches bring ${formatUsd(plan.cashNowUsd)} and a HELOC covers the remaining ${formatUsd(shortfall)} (rule X-1).`);
+    }
+  }
+  if (!chosen && !(intent === "unsure" && homeChoice && watchChoice)) reasons.push("No path reaches the goal with the choices made so far.");
 
   // M2 gate: every registry value behind these numbers must be fresh.
   const usedKeys = [...new Set([...options.flatMap((option) => option.usedParamKeys), ...RULE_KEYS])];
@@ -195,7 +208,9 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
   return {
     status: "ok",
     recommendation: {
+      intent,
       chosenId: chosen?.id ?? null,
+      laneChoices,
       options,
       rulesFired: [...new Set(rulesFired)],
       reasons,

@@ -52,7 +52,9 @@ export type AssetSummary =
     };
 
 export type Recommendation = {
-  chosenId: string | null; // null when no path reaches the goal
+  intent: "home" | "watch" | "unsure";
+  chosenId: string | null; // null when no path reaches the goal, or when both lanes work and the user chooses
+  laneChoices: { real_estate?: string | null; watch?: string | null }; // best path per lane (null = none reaches the goal)
   options: PathOption[];
   rulesFired: string[];
   reasons: string[];

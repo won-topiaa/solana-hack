@@ -20,6 +20,7 @@ import type { Registry } from "../params/types";
 import { hashOf } from "../recommend/canonical";
 import { describeRecommendation } from "../recommend/display";
 import { buildPassport, buildReceipt, type AssetPassport } from "../recommend/passport";
+import { isSelectable } from "../recommend/watches";
 import { assetSummaries, realEstateTerms, recommend, watchLabel } from "../recommend/recommend";
 import { buildHeiTermSheet, describeTermSheet, type HeiTermSheet } from "../recommend/termSheet";
 
@@ -45,6 +46,11 @@ export const recordGoal: AgentTool = {
     parameters: {
       type: "object",
       properties: {
+        intent: {
+          type: "string",
+          enum: ["home", "watch", "unsure"],
+          description: "Which asset the user wants to use or tokenize: their home, a watch, or not sure yet.",
+        },
         cashNeededUsd: { type: "number", description: "Cash the user needs, in US dollars." },
         neededBy: { type: "string", description: "Date the cash is needed by, as YYYY-MM-DD." },
         repayHorizonYears: { type: "number", description: "Years until the user expects to repay, if they said." },
@@ -533,21 +539,34 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
     declaration: {
       name: "prepare_documents",
       description:
-        "Prepare the handoff for the recommended path: the HEI term sheet (when the path is an HEI), an asset passport " +
-        "for each asset it uses, and the recommendation receipt with their hashes. Nothing is signed, sent or recorded " +
-        "on-chain. Quote the display text exactly.",
-      parameters: { type: "object", properties: {} },
+        "Prepare the handoff for a path: the HEI term sheet (when the path is an HEI), an asset passport for each " +
+        "asset it uses, and the recommendation receipt with their hashes. Use the recommended path, or the optionId " +
+        "of the path the user chose. Nothing is signed, sent or recorded on-chain. Quote the display text exactly.",
+      parameters: {
+        type: "object",
+        properties: {
+          optionId: { type: "string", description: "The id of the path the user chose; leave out to use the recommended one." },
+        },
+      },
     },
     stages: ["compare", "prepare"],
     requiresApproval: false,
-    run(_args, { caseFile, now }) {
+    run(args, { caseFile, now }) {
       const recommendation = caseFile.recommendation;
-      if (!recommendation?.chosenId) return { output: { prepared: false, problem: "Compare the paths first; there is no recommended path yet." }, caseFile };
+      if (!recommendation) return { output: { prepared: false, problem: "Compare the paths first." }, caseFile };
       if (inputsChanged(caseFile)) {
         return { output: { prepared: false, problem: "The goal or assets changed after the comparison. Call compare_paths again." }, caseFile };
       }
-      const chosen = recommendation.options.find((option) => option.id === recommendation.chosenId);
-      if (!chosen) return { output: { prepared: false, problem: "The recommended path is missing." }, caseFile };
+      const optionId = typeof args.optionId === "string" ? args.optionId : recommendation.chosenId;
+      if (!optionId) {
+        return { output: { prepared: false, problem: "There is no single recommended path. Ask the user which path they want and pass its optionId." }, caseFile };
+      }
+      const chosen = recommendation.options.find((option) => option.id === optionId);
+      if (!chosen) return { output: { prepared: false, problem: `No path with id ${optionId} in the comparison.` }, caseFile };
+      if (!isSelectable(chosen)) {
+        return { output: { prepared: false, problem: `${chosen.label} cannot be prepared: ${chosen.whyNotSuitable ?? "it is shown for information only"}` }, caseFile };
+      }
+      const recommended = recommendation.options.find((option) => option.id === recommendation.chosenId);
 
       let file = caseFile;
       const passports: AssetPassport[] = [];
@@ -567,10 +586,18 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
           recommendation.registryVersion,
         );
       }
-      const receipt = buildReceipt(recommendation, passports, now);
+      const receipt = buildReceipt(recommendation, passports, now, chosen.id);
+      const whose =
+        chosen.id === recommendation.chosenId
+          ? `Prepared for the recommended path: ${chosen.label}.`
+          : `Prepared for the path you chose: ${chosen.label}. ${recommended ? `The recommendation was ${recommended.label}; ` : ""}the receipt records both.`;
+      const tokenDesign = chosen.id.startsWith("w-vault-token-")
+        ? ["Token design: a 1-of-1 token (supply 1, no decimals) that stands for the vaulted watch; redeeming it releases the watch. Vault intake is simulated in this demo."]
+        : [];
       const lines = [
-        `Prepared for: ${chosen.label}. Nothing was signed, sent or recorded on-chain.`,
+        `${whose} Nothing was signed, sent or recorded on-chain.`,
         ...(termSheet ? describeTermSheet(termSheet) : []),
+        ...tokenDesign,
         ...passports.map((passport) => `Asset passport for ${assetLabel(file, passport.assetId)}: hash ${hashOf(passport)}.`),
         `Recommendation receipt: recommendation hash ${receipt.recommendationHash}; passports hash ${receipt.passportHash}; parameter registry ${receipt.registryVersion}.`,
         "Recording the receipt on Solana and issuing tokens come in a later step and need your approval and wallet signature.",

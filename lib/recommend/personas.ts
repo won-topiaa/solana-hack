@@ -3,7 +3,7 @@
 
 import data from "../../data/demo/personas.json";
 import { createCaseFile } from "../agent/orchestrator";
-import type { CaseFile } from "../agent/types";
+import type { CaseFile, Intent } from "../agent/types";
 import type { Asset, PiiItem } from "../assets/types";
 import { findWatchPrice } from "../assets/watchPrices";
 
@@ -50,7 +50,7 @@ export function personaCase(id: string, now: Date): CaseFile {
   return {
     ...createCaseFile(`persona-${id}`, now),
     stage: "capture",
-    goal: { ...persona.goal, keepAssetIds: persona.keep },
+    goal: { ...persona.goal, intent: persona.goal.intent as Intent, keepAssetIds: persona.keep },
     assets,
     pii,
   };
