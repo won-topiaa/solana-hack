@@ -1,4 +1,4 @@
-// Placeholder home page for milestone M0 (scaffold).
+// Placeholder home page (added in milestone M0).
 // The chat-based agent replaces this page in M3.
 export default function Home() {
   return (
@@ -15,7 +15,7 @@ export default function Home() {
         the best option and you approve it.
       </p>
       <p className="rounded-md border border-zinc-200 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
-        Status: project scaffold (milestone M0). The agent is not built yet.
+        Status: in development. The agent is not built yet.
       </p>
       <p className="text-xs text-zinc-500">Not investment or financial advice.</p>
     </main>

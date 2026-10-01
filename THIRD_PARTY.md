@@ -5,7 +5,7 @@ with its license. Versions and licenses below are read from the installed packag
 (`node_modules/<name>/package.json`). The full dependency tree, including transitive
 packages, is pinned in `package-lock.json`.
 
-Last updated: 2026-10-01 (milestone M0).
+Last updated: 2026-10-01 (milestone M1).
 
 ## Runtime dependencies
 
@@ -24,7 +24,8 @@ Last updated: 2026-10-01 (milestone M0).
 | typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript |
 | eslint | 9.39.5 | MIT | https://github.com/eslint/eslint |
 | eslint-config-next | 16.3.8 | MIT | https://github.com/vercel/next.js |
-| @types/node | 20.19.43 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
+| vitest | 5.0.3 | MIT | https://github.com/vitest-dev/vitest |
+| @types/node | 22.20.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
 | @types/react | 19.3.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
 | @types/react-dom | 19.3.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
 

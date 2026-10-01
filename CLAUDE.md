@@ -108,7 +108,7 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /app                      Next.js App Router (landing chat, /case/[id], /token/[mint], /settle/[id])
 /components               Chat, CameraCapture, PathTable, TermSheet, PassportView, ReceiptBadge, SimulatedTag
 /lib/agent                orchestrator, tool definitions, prompts (English)
-/lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts  (+ *.test.ts)
+/lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts
 /lib/chain                adapter.ts, solana.ts, mock.ts
 /lib/integrations         rentcast.ts, plaid.ts, vision.ts, watchRegister.mock.ts
@@ -220,17 +220,19 @@ type Receipt = { recommendationHash: string; passportHash: string; registryVersi
 ---
 
 ## 11. Commands
-Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 20.9+ (tested with Node 24, npm 11).
+Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vitest 5 (Next.js alone needs 20.9+); tested with Node 24, npm 11.
 
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies from `package-lock.json` |
 | `npm run dev` | Dev server at http://localhost:3000 (Turbopack) |
+| `npm test` | Unit tests once (Vitest); §8.5 test vectors live in `lib/calc/*.test.ts` |
+| `npm run test:watch` | Unit tests in watch mode |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |
 
-Stack (M0): Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9.
+Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`).
 
 ## 12. Definition of done
 Public repo with OSS license; deployed demo; English README (problem, how it works, why blockchain, what is simulated, trust assumptions, how to run); demo and pitch videos per the Arena form; all members registered on colosseum.com; team leader submits in the Arena before the deadline.

@@ -4,13 +4,13 @@ A neutral AI agent for US users who need cash. It compares every way to turn a h
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
 to the next step (including tokenization on Solana) only after explicit approval.
 
-> Status: project scaffold (milestone M0). The agent is not built yet.
+> Status: in development (milestone M1: money math with unit tests). The agent is not built yet.
 >
 > Not investment or financial advice.
 
 ## Run locally
 
-Requires Node.js 20.9 or later.
+Requires Node.js 22.12 or later (the test runner, Vitest 5, needs it).
 
 ```bash
 npm install
@@ -21,6 +21,7 @@ npm run dev                  # then open http://localhost:3000
 ## Checks
 
 ```bash
+npm test        # unit tests for the money math (Vitest)
 npm run lint    # ESLint
 npm run build   # production build, includes the TypeScript type check
 ```
