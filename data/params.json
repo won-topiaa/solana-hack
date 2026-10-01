@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-10-01.3",
+  "registry_version": "2026-10-01.4",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
@@ -14,6 +14,10 @@
     {
       "version": "2026-10-01.3",
       "note": "hei_max_investment_pct_of_value is now a design value (owner decision 2026-10-01): our own eligibility cap, calibrated from Hometap. It no longer goes stale. Value unchanged."
+    },
+    {
+      "version": "2026-10-01.4",
+      "note": "refresh-params: sofr 0.039 -> 0.039 (as_of 2026-09-28 -> 2026-09-30)"
     }
   ],
   "rules": {
@@ -74,8 +78,8 @@
       "kind": "market",
       "source": "FRED series SOFR (API: fred/series/observations, JSON, API key)",
       "source_url": "https://fred.stlouisfed.org/series/SOFR",
-      "as_of": "2026-09-28",
-      "checked_at": null,
+      "as_of": "2026-09-30",
+      "checked_at": "2026-10-01",
       "valid_days": 3
     },
     "hei_investor_discount": {
