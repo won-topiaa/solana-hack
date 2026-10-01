@@ -42,7 +42,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 
 ## 3. How to work with the owner (mandatory)
 
-1. **One milestone at a time** (§10). At the end of each milestone: stop, summarize in plain language, list exactly how to verify (commands, URLs, clicks), and **wait for an explicit OK**.
+1. **One milestone at a time** (§10). At the end of each milestone: stop, summarize in plain language, list exactly how to verify (commands, URLs, clicks), and **wait for an explicit OK**. After the OK, commit the milestone (English message). Do not push to GitHub until the owner says so.
 2. **Never guess** package names, SDK methods, program IDs, addresses, API endpoints or numeric parameters. Check official docs first and record the URL in `docs/internal/PROGRESS.md`. If something cannot be verified, stop and ask.
 3. **Numbers come from code, never from the LLM.** The LLM handles conversation, reading photos/documents and explanations. All money math lives in pure functions in `/lib/calc` with unit tests (§8). Every number shown to the user must come from those functions and `data/params.json`.
 4. **TBD means undecided.** Do not choose for the owner; ask, or build behind an interface.
@@ -59,7 +59,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | Market | United States (decided) |
 | Lanes | Real estate (HEI tokens) + watches, both end to end (decided) |
 | Agent role | Neutral comparison + connector; partners are issuer/custodian (decided) |
-| HEI pricing | discount 33.3%, fee 3.9% (min $2,000), investor return cap 20%/yr, term 5–30 yrs (default 10) (decided) |
+| HEI pricing | discount 33.3%, fee 3.9% (min $2,000), investor return cap 20%/yr, term 5–30 yrs (default 10), max investment 24.99% of home value (our design cap, calibrated from Hometap) (decided) |
 | HELOC-first rule | If repayment planned within 3 years, show HELOC / home equity loan first (decided) |
 | Chain / track | **Solana** (decided 2026-10-01): devnet for the demo, Solana track (Rules §14(e)); Token-2022 + Solana Agent Kit |
 | Arena category | Tentative: Real World Assets (RWA); alternative: AI Platforms / Agents |

@@ -1,10 +1,11 @@
 {
-  "registry_version": "2026-10-01.2",
+  "registry_version": "2026-10-01.3",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
     {"version": "2026-10-01.1", "note": "Initial import."},
-    {"version": "2026-10-01.2", "note": "Added checked_at to every parameter; product values now age from checked_at instead of as_of. Clarified the watch_full_kit_uplift source note. No values changed."}
+    {"version": "2026-10-01.2", "note": "Added checked_at to every parameter; product values now age from checked_at instead of as_of. Clarified the watch_full_kit_uplift source note. No values changed."},
+    {"version": "2026-10-01.3", "note": "hei_max_investment_pct_of_value is now a design value (owner decision 2026-10-01): our own eligibility cap, calibrated from Hometap. It no longer goes stale. Value unchanged."}
   ],
   "rules": {
     "kinds": {
@@ -13,7 +14,7 @@
       "design": "Our own choices. Changed only by the owner, with a version bump and a reason.",
       "reference": "Context for explanations only. Never used in a calculation."
     },
-    "dates": "as_of = the date the value refers to: the observation or release date for market values; the source's own publication date for product and reference values, or the day we read it when the source shows no date. checked_at = the day we last confirmed the value at its source (null = not confirmed yet).",
+    "dates": "as_of = the date the value refers to: the observation or release date for market values; the source's own publication date for product and reference values, or the day we read it when the source shows no date; for design values, the date of the source they were calibrated from, or the owner's decision date when there is none. checked_at = the day we last confirmed the value at its source (null = not confirmed yet; design values do not need it).",
     "staleness": "A value used by a calculation is stale when its age is greater than valid_days. Age counts from as_of for market values (the data itself gets old) and from checked_at for product values (a term stays current until the partner changes it; a null checked_at counts as stale). Design values never go stale and reference values never block. If any value used by a calculation is stale, the agent must not finalize a recommendation and must show 'needs fresh data'.",
     "receipt": "Every recommendation records registry_version so the result can be reproduced later."
   },
@@ -67,10 +68,10 @@
       "as_of": "2026-10-01", "checked_at": "2026-10-01", "valid_days": 30
     },
     "hei_max_investment_pct_of_value": {
-      "value": 0.2499, "unit": "fraction of home value", "kind": "product",
-      "source": "Hometap maximum: 24.99% of home value (used as our eligibility cap)",
+      "value": 0.2499, "unit": "fraction of home value", "kind": "design",
+      "source": "Owner decision 2026-10-01: our own eligibility cap, calibrated from Hometap's published maximum of 24.99% of home value (2024 article). Hometap's site blocked access from Korea on 2026-10-01; 2026 third-party reviews cite 25% (LendEDU, 2026-09-10) and 27% of equity (Finder, 2026-06-25).",
       "source_url": "https://www.hometap.com/blog/how-hometap-pricing-works",
-      "as_of": "2024-09-30", "checked_at": null, "valid_days": 30
+      "as_of": "2024-09-30", "checked_at": null, "valid_days": null
     },
     "hei_investor_return_cap": {
       "value": 0.20, "unit": "annualized on investor capital", "kind": "design",
