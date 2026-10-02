@@ -12,7 +12,8 @@ async function build(): Promise<WebDeps> {
   const secret = process.env.CASE_SECRET;
   if (!secret) throw new Error("CASE_SECRET is not set. Add a long random value to .env.local (see .env.example).");
   const built = await createAgentServices();
-  return { agent: built.agent, registry: built.registry, secret, hei: built.hei };
+  // The web app shows tool results in its panel, so the agent keeps its replies short.
+  return { agent: { ...built.agent, channel: "web" }, registry: built.registry, secret, hei: built.hei };
 }
 
 export function webDeps(): Promise<WebDeps> {

@@ -110,8 +110,7 @@ export function createLookupHome(source: PropertyDataSource): AgentTool {
       name: "lookup_home",
       description:
         "Look up the user's home by its full address: public records and an automated value range. " +
-        "Also checks the name on the title against the owner on record. Quote the returned display " +
-        "and ownerCheck text exactly.",
+        "Also checks the name on the title against the owner on record.",
       parameters: {
         type: "object",
         properties: {
@@ -228,7 +227,7 @@ export function createConnectMortgage(source: MortgageDataSource): AgentTool {
       name: "connect_mortgage_account",
       description:
         "Read the remaining mortgage balance and terms from the user's lender through Plaid, instead of the " +
-        "user typing the balance. The user must approve the connection first. Quote the display text exactly.",
+        "user typing the balance. The user must approve the connection first.",
       parameters: {
         type: "object",
         properties: { assetId: { type: "string", description: "The home's assetId from lookup_home." } },
@@ -322,7 +321,7 @@ export function createReadWatchPhotos(vision: WatchVision): AgentTool {
       name: "read_watch_photos",
       description:
         "Read the user's uploaded watch photos (dial, case back, box, papers) and add the watch to the case. " +
-        "Quote the returned display text exactly; it never contains the serial number. Then ask about anything in needs.",
+        "Its result never contains the serial number. Then ask about anything in needs.",
       parameters: {
         type: "object",
         properties: {
@@ -383,7 +382,7 @@ export const recordWatch: AgentTool = {
     name: "record_watch",
     description:
       "Save watch details the user states: when they have no photos, to answer what the photos did not show " +
-      "(box, papers, category), or to correct a reading. Omit assetId to add a new watch. Quote the display text exactly.",
+      "(box, papers, category), or to correct a reading. Omit assetId to add a new watch.",
     parameters: {
       type: "object",
       properties: {
@@ -450,7 +449,7 @@ export const checkWatchRegistry: AgentTool = {
     name: "check_watch_registry",
     description:
       "Check a watch's serial number against a stolen-watch registry. The user must approve first. " +
-      "In this demo the check is simulated and contacts no one. Quote the display text exactly.",
+      "In this demo the check is simulated and contacts no one.",
     parameters: { type: "object", properties: { assetId: { type: "string" } }, required: ["assetId"] },
   },
   stages: EDITABLE_STAGES,
@@ -486,7 +485,7 @@ export const setKeepAssets: AgentTool = {
     name: "set_keep_assets",
     description:
       "Record which assets the user wants to keep, by assetId from earlier tool results (an empty list = none). " +
-      "Confirm with the user first. Quote the display text exactly.",
+      "Confirm with the user first.",
     parameters: {
       type: "object",
       properties: { assetIds: { type: "array", items: { type: "string" } } },
@@ -518,7 +517,7 @@ export function createComparePaths(registry: Registry): AgentTool {
       description:
         "Compare every way to raise the cash for the saved goal and assets, and recommend one with fixed rules. " +
         "Call it when the goal, the assets and the keep choices are covered, and again after any change. " +
-        "Quote the display text exactly; explain only with the reasons it gives.",
+        "Explain only with the reasons it gives.",
       parameters: { type: "object", properties: {} },
     },
     stages: EDITABLE_STAGES,
@@ -554,7 +553,7 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
       description:
         "Prepare the handoff for a path: the HEI term sheet (when the path is an HEI), an asset passport for each " +
         "asset it uses, and the recommendation receipt with their hashes. Use the recommended path, or the optionId " +
-        "of the path the user chose. Nothing is signed, sent or recorded on-chain. Quote the display text exactly.",
+        "of the path the user chose. Nothing is signed, sent or recorded on-chain.",
       parameters: {
         type: "object",
         properties: {
@@ -661,7 +660,7 @@ export function createRecordReceipt(chain: ChainService): AgentTool {
       name: "record_receipt_onchain",
       description:
         "Write the recommendation receipt (hashes only, no personal data) to Solana devnet, signed by the user's wallet. " +
-        "The app asks the user to approve first. Quote the display text exactly.",
+        "The app asks the user to approve first.",
       parameters: { type: "object", properties: {} },
     },
     stages: ["prepare", "execute"],
@@ -698,7 +697,7 @@ export function createIssueHeiShares(chain: ChainService): AgentTool {
       description:
         "For an HEI: create the HEI share tokens on Solana devnet, issued by the simulated partner into its treasury for the " +
         "primary sale. Token accounts start frozen; only KYC-approved wallets are opened. Needs the user's approval and the " +
-        "receipt on-chain first. Quote the display text exactly.",
+        "receipt on-chain first.",
       parameters: { type: "object", properties: {} },
     },
     stages: ["prepare", "execute"],
@@ -746,7 +745,7 @@ export function createIssueWatchToken(chain: ChainService): AgentTool {
       name: "issue_watch_token",
       description:
         "For the watch tokenization path: record the simulated vault intake and create the watch's 1-of-1 token in the " +
-        "user's wallet on Solana devnet. Needs the user's approval and the receipt on-chain first. Quote the display text exactly.",
+        "user's wallet on Solana devnet. Needs the user's approval and the receipt on-chain first.",
       parameters: { type: "object", properties: {} },
     },
     stages: ["prepare", "execute"],

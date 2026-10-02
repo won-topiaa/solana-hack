@@ -4,7 +4,7 @@
 
 import { todayInNewYork } from "../params/dates";
 import type { LlmClient } from "./llm";
-import { systemPrompt } from "./prompts";
+import { systemPrompt, type Channel } from "./prompts";
 import type { AgentTool } from "./tools";
 import type { AgentMessage, CaseFile, PendingApproval, ToolCall, ToolResult } from "./types";
 
@@ -13,7 +13,7 @@ export const MAX_MODEL_CALLS_PER_TURN = 6;
 
 const EMPTY_REPLY = "Sorry, I could not produce an answer. Please try again.";
 
-export type AgentDeps = { llm: LlmClient; tools: AgentTool[]; now?: () => Date };
+export type AgentDeps = { llm: LlmClient; tools: AgentTool[]; now?: () => Date; channel?: Channel };
 
 export type TurnResult = { caseFile: CaseFile; reply: string; awaitingApproval: PendingApproval | null };
 
@@ -90,7 +90,7 @@ async function runModelLoop(start: CaseFile, deps: AgentDeps): Promise<TurnResul
     // Each step offers only its own tools, so the model cannot skip ahead.
     const offered = deps.tools.filter((tool) => tool.stages.includes(file.stage)).map((tool) => tool.declaration);
     const reply = await deps.llm.generate({
-      system: systemPrompt(file.stage, today, offered.map((tool) => tool.name)),
+      system: systemPrompt(file.stage, today, offered.map((tool) => tool.name), deps.channel),
       messages: file.messages,
       tools: offered,
     });

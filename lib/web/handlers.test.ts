@@ -80,6 +80,15 @@ describe("talking to the agent", () => {
     expect(approved.view.onchain.map((link) => link.label)).toEqual(["Recommendation receipt (memo)"]);
   });
 
+  it("asks the model for short replies when the deps say web", async () => {
+    const deps = depsWith([callTool("compare_paths"), say("Done: see the comparison in the panel.")]);
+    const webDeps = { ...deps, agent: { ...deps.agent, channel: "web" as const } };
+    const started = startCase(webDeps, { persona: "B" });
+    await postMessage(webDeps, { token: started.token, text: "Compare." });
+    const llm = webDeps.agent.llm as ReturnType<typeof createScriptedLlm>;
+    expect(llm.requests.every((request) => request.system.includes("Do not repeat any of that in the chat"))).toBe(true);
+  });
+
   it("refuses a token the browser changed", async () => {
     const reply = startCase(depsWith([]), {});
     await expect(postMessage(depsWith([]), { token: `${reply.token.slice(0, -4)}AAAA`, text: "hi" })).rejects.toThrow(BadRequest);
