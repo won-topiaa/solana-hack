@@ -5,6 +5,7 @@
 //   PLAID_CLIENT_ID + PLAID_SECRET (sandbox); SOLANA_RPC_URL; REGISTRY_FROZEN_ON (judging period).
 //   Devnet wallets: .wallets/devnet.
 
+import type { ChainService } from "../chain/adapter";
 import { createDevnetChain } from "../chain/devnet";
 import type { HeiWallets } from "../chain/heiLifecycle";
 import { createDevnetRpc, type DevnetRpc } from "../chain/solana";
@@ -23,6 +24,7 @@ import { createAgentTools } from "./tools";
 export type AgentServices = {
   agent: AgentDeps;
   registry: Registry;
+  chain: ChainService;
   hei: { rpc: DevnetRpc; wallets: HeiWallets };
   info: { model: string; propertyData: "rentcast" | "demo"; plaid: boolean };
 };
@@ -50,6 +52,7 @@ export async function createAgentServices(env: Env = process.env): Promise<Agent
   );
   // A deployment for the judging period freezes the values on one date (REGISTRY_FROZEN_ON).
   const registry = env.REGISTRY_FROZEN_ON ? freezeRegistry(getRegistry(), env.REGISTRY_FROZEN_ON, todayInNewYork()) : getRegistry();
+  const chain = createDevnetChain(rpc, { issuer, user });
   return {
     agent: {
       llm: createGeminiClient({ apiKey, model }),
@@ -58,10 +61,11 @@ export async function createAgentServices(env: Env = process.env): Promise<Agent
         propertySource,
         mortgageSource,
         vision: createGeminiVision({ apiKey, model }),
-        chain: createDevnetChain(rpc, { issuer, user }),
+        chain,
       }),
     },
     registry,
+    chain,
     hei: {
       rpc,
       wallets: {

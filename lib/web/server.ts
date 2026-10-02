@@ -14,7 +14,7 @@ async function build(): Promise<WebDeps> {
   if (!secret) throw new Error("CASE_SECRET is not set. Set a long random value in .env.local, or in the hosting's environment variables (see .env.example).");
   const built = await createAgentServices();
   // The web app shows tool results in its panel, so the agent keeps its replies short.
-  return { agent: { ...built.agent, channel: "web" }, registry: built.registry, secret, hei: built.hei };
+  return { agent: { ...built.agent, channel: "web" }, registry: built.registry, secret, hei: built.hei, chain: built.chain };
 }
 
 export function webDeps(): Promise<WebDeps> {
@@ -26,7 +26,7 @@ export function webDeps(): Promise<WebDeps> {
   return services;
 }
 
-type Action = (deps: WebDeps, body: Record<string, unknown>) => CaseReply | Promise<CaseReply>;
+type Action = (deps: WebDeps, body: Record<string, unknown>) => CaseReply | object | Promise<CaseReply | object>;
 
 /**
  * Runs one action for a JSON request. A BadRequest answers 400 with its message.

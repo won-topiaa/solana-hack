@@ -3,23 +3,27 @@
 // again with what the browser shows. Plain functions with their services passed in,
 // so tests run them with a scripted model and a stand-in chain.
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createCaseFile, resolveApproval, sendUserMessage, type AgentDeps } from "../agent/orchestrator";
 import { addPhoto, dropReadPhotoBytes, MAX_PHOTO_BYTES } from "../agent/photos";
 import type { CaseFile } from "../agent/types";
-import { runPrimarySale, runSettlement, type HeiWallets } from "../chain/heiLifecycle";
-import type { DevnetRpc } from "../chain/solana";
+import type { ChainService } from "../chain/adapter";
+import { prepareWalletSettlementPayment, runPrimarySale, runSettlement, type HeiWallets, type WalletPaymentRequest } from "../chain/heiLifecycle";
+import { receiptMemo, type DevnetRpc } from "../chain/solana";
+import { parseSignedByWallet, parseWalletAddress, verifyWalletProof, walletProofMessage, type SignedByWallet, type UnsignedForWallet } from "../chain/userWallet";
 import { todayInNewYork } from "../params/dates";
 import type { Registry } from "../params/types";
 import { PERSONA_IDS, personaCaseOn } from "../recommend/personas";
+import { findSettlementScenario } from "../recommend/settlementScenarios";
 import { openCase, sealCase } from "./caseToken";
-import { buildView, type CaseView } from "./view";
+import { approvalNeedsWallet, buildView, walletLocked, type CaseView } from "./view";
 
 export type WebDeps = {
   agent: AgentDeps;
   registry: Registry;
   secret: string; // CASE_SECRET
   hei?: { rpc: DevnetRpc; wallets: HeiWallets }; // devnet partner steps; absent = not offered
+  chain?: ChainService; // for steps the user's own wallet signs
   now?: () => Date;
 };
 
@@ -117,13 +121,78 @@ export async function postMessage(deps: WebDeps, input: { token: unknown; text: 
   return reply(deps, turn.caseFile);
 }
 
-/** The user's yes or no to the action waiting for approval. */
-export async function postApproval(deps: WebDeps, input: { token: unknown; approvalId: unknown; approved: unknown }): Promise<CaseReply> {
+function signedFrom(value: unknown): SignedByWallet | undefined {
+  if (value === undefined || value === null) return undefined;
+  try {
+    return parseSignedByWallet(value);
+  } catch (error) {
+    throw new BadRequest(error instanceof Error ? error.message : "Bad wallet signature");
+  }
+}
+
+/** The user's yes or no to the action waiting for approval; a yes to a wallet step carries the wallet's signature. */
+export async function postApproval(deps: WebDeps, input: { token: unknown; approvalId: unknown; approved: unknown; signed?: unknown }): Promise<CaseReply> {
   const caseFile = openToken(deps, input.token);
   if (typeof input.approved !== "boolean") throw new BadRequest("approved must be true or false");
   if (!caseFile.pendingApproval || caseFile.pendingApproval.id !== input.approvalId) throw new BadRequest("No such approval request");
-  const turn = await resolveApproval(caseFile, caseFile.pendingApproval.id, input.approved, deps.agent);
+  const signed = signedFrom(input.signed);
+  if (input.approved && approvalNeedsWallet(caseFile) && !signed) throw new BadRequest("Sign this step in your wallet to approve it");
+  const turn = await resolveApproval(caseFile, caseFile.pendingApproval.id, input.approved, deps.agent, signed);
   return reply(deps, turn.caseFile);
+}
+
+/** The transaction the user's wallet signs to approve the pending step (it is not sent yet). */
+export async function prepareApprovalSignature(deps: WebDeps, input: { token: unknown; approvalId: unknown }): Promise<UnsignedForWallet> {
+  const caseFile = openToken(deps, input.token);
+  const pending = caseFile.pendingApproval;
+  if (!pending || pending.id !== input.approvalId) throw new BadRequest("No such approval request");
+  if (!approvalNeedsWallet(caseFile) || !caseFile.wallet) throw new BadRequest("This step is not signed in your wallet");
+  if (!deps.chain) throw new BadRequest("Solana devnet is not set up on this server");
+  if (!caseFile.handoff) throw new BadRequest("Prepare the documents first");
+  return deps.chain.prepareWalletReceipt(receiptMemo(caseFile.handoff.receipt), caseFile.wallet.address);
+}
+
+// ---- The user's own wallet --------------------------------------------------
+
+/** Step 1 of connecting a wallet: the message it must sign (it names the case and the address). */
+export function walletChallenge(deps: WebDeps, input: { token: unknown; address: unknown }): CaseReply & { message: string } {
+  const caseFile = openToken(deps, input.token);
+  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  let wallet: string;
+  try {
+    wallet = parseWalletAddress(input.address);
+  } catch (error) {
+    throw new BadRequest(error instanceof Error ? error.message : "Bad wallet address");
+  }
+  const issuedAt = currentTime(deps).toISOString();
+  const message = walletProofMessage({ caseId: caseFile.id, wallet, nonce: randomBytes(16).toString("hex"), issuedAt });
+  const next = { ...caseFile, walletChallenge: { address: wallet, message, issuedAt } };
+  return { ...reply(deps, next), message };
+}
+
+/** A challenge older than this must be asked for again. */
+const CHALLENGE_MINUTES = 10;
+
+/** Step 2: the wallet's signature over that message ties the wallet to the case. */
+export async function walletConnect(deps: WebDeps, input: { token: unknown; signature: unknown }): Promise<CaseReply> {
+  const caseFile = openToken(deps, input.token);
+  const challenge = caseFile.walletChallenge;
+  if (!challenge) throw new BadRequest("Ask for the message to sign first");
+  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  const now = currentTime(deps);
+  if (now.getTime() - Date.parse(challenge.issuedAt) > CHALLENGE_MINUTES * 60_000) throw new BadRequest("The message to sign expired; connect the wallet again");
+  if (typeof input.signature !== "string" || !(await verifyWalletProof(parseWalletAddress(challenge.address), challenge.message, input.signature))) {
+    throw new BadRequest("The wallet's signature does not match the message");
+  }
+  const connected: CaseFile = { ...caseFile, walletChallenge: undefined, wallet: { address: challenge.address, connectedAt: now.toISOString() } };
+  return reply(deps, { ...connected, events: [...connected.events, { at: now.toISOString(), type: "wallet_connected", detail: challenge.address }] });
+}
+
+/** Back to the demo wallet (only before anything is on-chain). */
+export function walletDisconnect(deps: WebDeps, input: { token: unknown }): CaseReply {
+  const caseFile = openToken(deps, input.token);
+  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  return reply(deps, { ...caseFile, wallet: undefined, walletChallenge: undefined });
 }
 
 function heiParts(deps: WebDeps, caseFile: CaseFile) {
@@ -145,20 +214,55 @@ export async function runHeiSale(deps: WebDeps, input: { token: unknown }): Prom
   const caseFile = openToken(deps, input.token);
   const { hei, handoff, deal, shares } = heiParts(deps, caseFile);
   if (handoff.onchain?.heiSale) throw new BadRequest("The primary sale already ran");
-  const sale = await runPrimarySale(hei.rpc, hei.wallets, { heiMint: shares.mint, treasury: shares.treasury, deal }, () => currentTime(deps));
+  const sale = await runPrimarySale(hei.rpc, hei.wallets, { heiMint: shares.mint, treasury: shares.treasury, deal, homeowner: caseFile.wallet?.address }, () =>
+    currentTime(deps),
+  );
   return reply(deps, withOnchain(caseFile, { heiSale: sale }));
 }
 
-/** Settlement after `years` with a simulated appraisal at `growth` a year: pays holders and burns their shares. */
-export async function runHeiSettlement(deps: WebDeps, input: { token: unknown; years: unknown; growth: unknown }): Promise<CaseReply> {
-  const caseFile = openToken(deps, input.token);
-  const { hei, handoff, deal, shares } = heiParts(deps, caseFile);
-  const sale = handoff.onchain?.heiSale;
+/** The settlement's years and home price growth come from a scenario id: the numbers stay on the server. */
+function settlementParts(deps: WebDeps, caseFile: CaseFile, input: { scenario: unknown }) {
+  const parts = heiParts(deps, caseFile);
+  const sale = parts.handoff.onchain?.heiSale;
   if (!sale) throw new BadRequest("Run the primary sale first");
-  if (handoff.onchain?.heiSettlement) throw new BadRequest("This HEI is already settled");
-  const { years, growth } = input;
-  if (typeof years !== "number" || !(years > 0 && years <= deal.termYears)) throw new BadRequest(`Settle after more than 0 and at most ${deal.termYears} years`);
-  if (typeof growth !== "number" || !(growth > -0.5 && growth < 0.5)) throw new BadRequest("Yearly growth must be between -50% and +50%");
-  const settled = await runSettlement(hei.rpc, hei.wallets, { heiMint: shares.mint, deal, sale, years, growth }, () => currentTime(deps));
-  return reply(deps, withOnchain(caseFile, { heiSettlement: settled }));
+  if (parts.handoff.onchain?.heiSettlement) throw new BadRequest("This HEI is already settled");
+  const scenario = findSettlementScenario(deps.registry, parts.deal.termYears, input.scenario);
+  if (!scenario) throw new BadRequest("Unknown settlement scenario for this HEI's term");
+  return { ...parts, sale, scenario, years: scenario.years, growth: scenario.growth };
+}
+
+/**
+ * With the user's own wallet as the homeowner: mints the simulated money it is missing
+ * and builds the payment into the settlement account for the wallet to sign. `payment`
+ * is null when the homeowner already paid (an earlier, interrupted run).
+ */
+export async function prepareHeiSettlement(deps: WebDeps, input: { token: unknown; scenario: unknown }): Promise<CaseReply & { payment: WalletPaymentRequest | null }> {
+  const caseFile = openToken(deps, input.token);
+  if (!caseFile.wallet) throw new BadRequest("This case uses the demo wallet: settle without signing");
+  const { hei, deal, shares, sale, years, growth } = settlementParts(deps, caseFile, input);
+  const payment = await prepareWalletSettlementPayment(hei.rpc, hei.wallets, { heiMint: shares.mint, deal, sale, years, growth, wallet: caseFile.wallet.address });
+  const pending = { years, growth, amountMicroUsd: payment?.amountMicroUsd ?? "0", mintedMicroUsd: payment?.mintedMicroUsd ?? "0", preparedAt: currentTime(deps).toISOString() };
+  return { ...reply(deps, withOnchain(caseFile, { heiSettlementPending: pending })), payment };
+}
+
+/**
+ * Settlement after `years` with a simulated appraisal at `growth` a year: the homeowner
+ * pays into the settlement account (the user's signed payment, or the demo wallet), then
+ * each holder is paid and its shares are burned.
+ */
+export async function runHeiSettlement(deps: WebDeps, input: { token: unknown; scenario: unknown; signed?: unknown }): Promise<CaseReply> {
+  const caseFile = openToken(deps, input.token);
+  const { hei, deal, shares, sale, scenario, years, growth } = settlementParts(deps, caseFile, input);
+  let homeowner: Parameters<typeof runSettlement>[2]["homeowner"] = { kind: "demo" };
+  if (caseFile.wallet) {
+    const pending = caseFile.handoff?.onchain?.heiSettlementPending;
+    if (!pending || pending.years !== years || pending.growth !== growth) throw new BadRequest("Prepare the settlement payment for your wallet first");
+    const signed = signedFrom(input.signed);
+    if (!signed && pending.amountMicroUsd !== "0") throw new BadRequest("Sign the settlement payment in your wallet first");
+    homeowner = { kind: "wallet", wallet: caseFile.wallet.address, signed, mintedMicroUsd: pending.mintedMicroUsd };
+  }
+  const settled = await runSettlement(hei.rpc, hei.wallets, { heiMint: shares.mint, deal, sale, years, growth, scenario: scenario.note, homeowner }, () =>
+    currentTime(deps),
+  );
+  return reply(deps, withOnchain(caseFile, { heiSettlement: settled, heiSettlementPending: undefined }));
 }

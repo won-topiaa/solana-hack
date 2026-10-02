@@ -14,6 +14,44 @@ export const FRED_SERIES: Readonly<Record<string, string>> = {
 export type Observation = { date: string; value: number }; // value as a fraction, e.g. 0.039
 
 /**
+ * FHFA All-Transactions House Price Index for the United States (quarterly, 1980:Q1 = 100,
+ * not seasonally adjusted). Its FRED page carries no third-party copyright note, unlike
+ * the Case-Shiller indexes. https://fred.stlouisfed.org/series/USSTHPI
+ */
+export const FRED_HOME_PRICE_SERIES = "USSTHPI";
+
+/** Registry key -> years back: the yearly home price growth over that many years, to the latest quarter. */
+export const HOME_PRICE_GROWTH_YEARS: Readonly<Record<string, number>> = {
+  home_price_growth_2y: 2,
+  home_price_growth_10y: 10,
+};
+
+/** Index levels from a FRED observations response, numeric rows only, oldest first. */
+export function indexObservations(fredJson: unknown): Observation[] {
+  const observations = (fredJson as { observations?: unknown })?.observations;
+  if (!Array.isArray(observations)) throw new Error("FRED response has no observations list");
+  return (observations as { date?: unknown; value?: unknown }[])
+    .filter((item): item is { date: string; value: string } => typeof item.date === "string" && typeof item.value === "string" && /^\d+(\.\d+)?$/.test(item.value.trim()))
+    .map((item) => ({ date: item.date, value: Number(item.value) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Yearly growth from the observation exactly `years` before the latest one (same month
+ * and day) to the latest: (latest / earlier)^(1 / years) - 1, to 6 decimals. Dated at the
+ * latest observation. null when that earlier quarter is missing.
+ */
+export function yearlyIndexGrowth(observations: Observation[], years: number): (Observation & { from: Observation; to: Observation }) | null {
+  const to = observations.at(-1);
+  if (!to) return null;
+  const fromDate = `${Number(to.date.slice(0, 4)) - years}${to.date.slice(4)}`;
+  const from = observations.find((item) => item.date === fromDate);
+  if (!from || !(from.value > 0)) return null;
+  const growth = Number((Math.pow(to.value / from.value, 1 / years) - 1).toFixed(6));
+  return { date: to.date, value: growth, from, to };
+}
+
+/**
  * Latest observation with a numeric value from a FRED series/observations JSON
  * response. FRED reports percent; the registry stores fractions.
  */

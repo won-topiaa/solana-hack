@@ -6,5 +6,5 @@ import { handle } from "@/lib/web/server";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  return handle(request, (deps, body) => postApproval(deps, { token: body.token, approvalId: body.approvalId, approved: body.approved }));
+  return handle(request, (deps, body) => postApproval(deps, { token: body.token, approvalId: body.approvalId, approved: body.approved, signed: body.signed }));
 }

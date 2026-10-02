@@ -21,13 +21,21 @@ export function createFakeChain(now: () => Date = () => new Date("2026-10-02T00:
       calls.push({ method: "recordReceipt", input: memo });
       return record(1, false);
     },
+    async prepareWalletReceipt(memo: string, wallet: string) {
+      calls.push({ method: "prepareWalletReceipt", input: { memo, wallet } });
+      return { transaction: "ZmFrZS10cmFuc2FjdGlvbg==", lastValidBlockHeight: "0" };
+    },
+    async recordWalletReceipt(memo: string, wallet: string, signed) {
+      calls.push({ method: "recordWalletReceipt", input: { memo, wallet, signed } });
+      return { ...record(1, false), signedBy: wallet };
+    },
     async issueHeiShares(input: HeiIssueInput) {
       calls.push({ method: "issueHeiShares", input });
       return { ...record(2, true), treasury: "fake-treasury" };
     },
-    async issueWatchToken(input: WatchIssueInput) {
+    async issueWatchToken(input: WatchIssueInput & { owner?: string }) {
       calls.push({ method: "issueWatchToken", input });
-      return { ...record(2, true), owner: "fake-user-wallet" };
+      return { ...record(2, true), owner: input.owner ?? "fake-user-wallet" };
     },
   };
 }

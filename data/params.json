@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-10-01.5",
+  "registry_version": "2026-10-02.1",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
@@ -22,6 +22,10 @@
     {
       "version": "2026-10-01.5",
       "note": "M6 comparison settings (owner decisions 2026-10-02): heloc_avg_rate_cltv_basis, comparison_default_horizon_years, hei_scenario_growth_rates, watch_dealer_urgent_days. No existing values changed."
+    },
+    {
+      "version": "2026-10-02.1",
+      "note": "refresh-params: sofr 0.039 -> 0.0387 (as_of 2026-09-30 -> 2026-10-01); mortgage_30y_fixed_avg 0.0703 -> 0.0728 (as_of 2026-09-24 -> 2026-10-01); mortgage_15y_fixed_avg 0.0642 -> 0.066 (as_of 2026-09-24 -> 2026-10-01); home_price_growth_2y 0 -> 0.034113 (as_of 2000-01-01 -> 2026-04-01); home_price_growth_10y 0 -> 0.068145 (as_of 2000-01-01 -> 2026-04-01)"
     }
   ],
   "rules": {
@@ -37,23 +41,23 @@
   },
   "params": {
     "mortgage_30y_fixed_avg": {
-      "value": 0.0703,
+      "value": 0.0728,
       "unit": "rate/yr",
       "kind": "market",
       "source": "Freddie Mac PMMS (published Thursdays 12pm ET; history downloadable as .xlsx)",
       "source_url": "https://www.globenewswire.com/news-release/2026/09/24/3368592/0/en/mortgage-rates-average-7-03.html",
-      "as_of": "2026-09-24",
-      "checked_at": null,
+      "as_of": "2026-10-01",
+      "checked_at": "2026-10-02",
       "valid_days": 7
     },
     "mortgage_15y_fixed_avg": {
-      "value": 0.0642,
+      "value": 0.066,
       "unit": "rate/yr",
       "kind": "market",
       "source": "Freddie Mac PMMS",
       "source_url": "https://www.globenewswire.com/news-release/2026/09/24/3368592/0/en/mortgage-rates-average-7-03.html",
-      "as_of": "2026-09-24",
-      "checked_at": null,
+      "as_of": "2026-10-01",
+      "checked_at": "2026-10-02",
       "valid_days": 7
     },
     "heloc_avg_rate": {
@@ -77,13 +81,13 @@
       "valid_days": 7
     },
     "sofr": {
-      "value": 0.039,
+      "value": 0.0387,
       "unit": "rate/yr",
       "kind": "market",
       "source": "FRED series SOFR (API: fred/series/observations, JSON, API key)",
       "source_url": "https://fred.stlouisfed.org/series/SOFR",
-      "as_of": "2026-09-30",
-      "checked_at": "2026-10-01",
+      "as_of": "2026-10-01",
+      "checked_at": "2026-10-02",
       "valid_days": 3
     },
     "hei_investor_discount": {
@@ -298,6 +302,26 @@
       "as_of": "2026-10-02",
       "checked_at": null,
       "valid_days": null
+    },
+    "home_price_growth_2y": {
+      "value": 0.034113,
+      "unit": "yearly home price growth",
+      "kind": "market",
+      "source": "FHFA All-Transactions House Price Index for the United States (FRED USSTHPI, quarterly): yearly growth over the 2 years to as_of, computed by scripts/refresh-params.ts. Used for the settlement demo's simulated appraisal.",
+      "source_url": "https://fred.stlouisfed.org/series/USSTHPI",
+      "as_of": "2026-04-01",
+      "checked_at": "2026-10-02",
+      "valid_days": 250
+    },
+    "home_price_growth_10y": {
+      "value": 0.068145,
+      "unit": "yearly home price growth",
+      "kind": "market",
+      "source": "FHFA All-Transactions House Price Index for the United States (FRED USSTHPI, quarterly): yearly growth over the 10 years to as_of, computed by scripts/refresh-params.ts. Used for the settlement demo's simulated appraisal.",
+      "source_url": "https://fred.stlouisfed.org/series/USSTHPI",
+      "as_of": "2026-04-01",
+      "checked_at": "2026-10-02",
+      "valid_days": 250
     }
   }
 }

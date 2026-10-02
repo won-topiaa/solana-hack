@@ -22,7 +22,16 @@ import {
 import { describe, expect, it } from "vitest";
 import { allocation, sharesToBuy } from "./heiLifecycle";
 import { purchaseInstructions } from "./heiSale";
-import { HOLDERS_PER_TRANSACTION, payoutsFor, settleHeiShares, settlementInstructions, type ShareHolding } from "./heiSettlement";
+import {
+  homeownerPaymentInstructions,
+  homeownerPaymentMemo,
+  HOLDERS_PER_TRANSACTION,
+  payoutsFor,
+  servicerFor,
+  settleHeiShares,
+  settlementInstructions,
+  type ShareHolding,
+} from "./heiSettlement";
 import { paymentAccount, type PaymentToken } from "./payment";
 import { tokenAccount, type DevnetRpc } from "./solana";
 
@@ -97,34 +106,30 @@ describe("a primary sale purchase (offline)", () => {
 
 describe("a settlement batch (offline)", () => {
   async function batch(size: number) {
-    const [homeowner, issuer, heiMint, ...owners] = await signers(3 + size);
+    const [servicer, issuer, heiMint, ...owners] = await signers(3 + size);
     const holdings: ShareHolding[] = await Promise.all(
       owners.map(async (owner, index) => ({ account: await tokenAccount(owner.address, heiMint.address), owner: owner.address, tokens: BigInt(1_000 * (index + 1)) })),
     );
     const supply = holdings.reduce((sum, holding) => sum + holding.tokens, BigInt(0));
     const payouts = payoutsFor(BigInt(1_500_000_000), holdings, supply);
     const token = await testDollar();
-    const steps = await settlementInstructions({ homeowner, issuer, heiMint: heiMint.address, token, payouts, memo: "ownflow settlement v1 test", fundHomeowner: true });
-    return { homeowner, issuer, payouts, steps, token };
+    const steps = await settlementInstructions({ servicer, issuer, heiMint: heiMint.address, token, payouts, memo: "ownflow settlement v1 test" });
+    return { servicer, issuer, payouts, steps, token };
   }
 
-  it("pays each holder and burns exactly that holder's tokens", async () => {
-    const { homeowner, payouts, steps, token } = await batch(2);
-    const [fund, ...parts] = kinds(steps);
+  it("pays each holder from the settlement account and burns exactly that holder's tokens", async () => {
+    const { servicer, payouts, steps, token } = await batch(2);
+    const parts = kinds(steps);
     expect(parts.map(({ kind }) => kind)).toEqual([
       Token2022Instruction.TransferChecked,
       Token2022Instruction.BurnChecked,
       Token2022Instruction.TransferChecked,
       Token2022Instruction.BurnChecked,
     ]);
-    // SIMULATED: the homeowner's money for exactly this batch, minted first in the same transaction.
-    expect(fund.kind).toBe(Token2022Instruction.MintTo);
-    expect(parseMintToInstruction(fund.ix).accounts.token.address).toBe(await paymentAccount(homeowner.address, token));
-    expect(parseMintToInstruction(fund.ix).data.amount).toBe(BigInt(1_500_000_000));
     for (const [index, payout] of payouts.entries()) {
       const pay = parseTransferCheckedInstruction(parts[index * 2].ix);
       const burn = parseBurnCheckedInstruction(parts[index * 2 + 1].ix);
-      expect(pay.accounts.source.address).toBe(await paymentAccount(homeowner.address, token));
+      expect(pay.accounts.source.address).toBe(await paymentAccount(servicer.address, token));
       expect(pay.accounts.destination.address).toBe(await paymentAccount(payout.owner, token));
       expect(pay.data.amount).toBe(payout.payoutMicroUsd);
       expect(burn.accounts.account.address).toBe(payout.account);
@@ -163,14 +168,40 @@ function fakeRpc(accounts: Record<string, { owner: string; amount: bigint }>, su
   return { rpc: rpc as unknown as DevnetRpc, attempts };
 }
 
+describe("the homeowner's payment into the settlement account (offline)", () => {
+  it("pays exactly the amount, with a memo naming the HEI; the demo homeowner's money is minted first", async () => {
+    const [homeowner, issuer, heiMint] = await signers(3);
+    const token = await testDollar();
+    const servicer = await servicerFor(issuer, heiMint.address);
+    const memo = homeownerPaymentMemo(heiMint.address, BigInt(224_765_868_886));
+    expect(memo).toBe(`ownflow settlement payment v1 mint=${heiMint.address} amount=224765868886`);
+    const steps = await homeownerPaymentInstructions({ homeowner, servicer: servicer.address, token, amountMicroUsd: BigInt(224_765_868_886), memo, fundFrom: issuer });
+    const parts = kinds(steps); // token instructions only: opening the account is another program
+    expect(parts.map(({ kind }) => kind)).toEqual([Token2022Instruction.MintTo, Token2022Instruction.TransferChecked]);
+    const pay = parseTransferCheckedInstruction(parts[1].ix);
+    expect(pay.accounts.source.address).toBe(await paymentAccount(homeowner.address, token));
+    expect(pay.accounts.destination.address).toBe(await paymentAccount(servicer.address, token));
+    expect(pay.data.amount).toBe(BigInt(224_765_868_886));
+    expect(fitsInOneTransaction(issuer, steps)).toBe(true);
+  });
+
+  it("belongs to a servicer key only the issuer can derive, one per HEI", async () => {
+    const [issuer, other, mint1, mint2] = await signers(4);
+    expect((await servicerFor(issuer, mint1.address)).address).toBe((await servicerFor(issuer, mint1.address)).address);
+    expect((await servicerFor(issuer, mint1.address)).address).not.toBe((await servicerFor(issuer, mint2.address)).address);
+    expect((await servicerFor(issuer, mint1.address)).address).not.toBe((await servicerFor(other, mint1.address)).address);
+  });
+});
+
 describe("settleHeiShares refuses before paying anyone", () => {
   async function setup() {
-    const [homeowner, issuer, heiMint, owner1, owner2] = await signers(5);
+    const [issuer, heiMint, owner1, owner2] = await signers(4);
     const token = await testDollar();
     const account1 = await tokenAccount(owner1.address, heiMint.address);
     const account2 = await tokenAccount(owner2.address, heiMint.address);
-    const input = { homeowner, issuer, heiMint: heiMint.address, token, payoutMicroUsd: BigInt(3_000_000), tokenSupply: BigInt(3_000), memo: "test", fundHomeowner: false };
-    return { homeowner, token, account1, account2, owner1, owner2, input };
+    const servicer = await servicerFor(issuer, heiMint.address);
+    const input = { issuer, heiMint: heiMint.address, token, payoutMicroUsd: BigInt(3_000_000), tokenSupply: BigInt(3_000), memo: "test" };
+    return { servicer, token, account1, account2, owner1, owner2, input };
   }
 
   it("when a holder is missing from the register", async () => {
@@ -187,14 +218,14 @@ describe("settleHeiShares refuses before paying anyone", () => {
     expect(attempts).toEqual([]);
   });
 
-  it("when the homeowner cannot pay the whole amount", async () => {
-    const { homeowner, token, account1, owner1, input } = await setup();
-    const homeownerDollars = await paymentAccount(homeowner.address, token);
+  it("when the homeowner's payment has not fully arrived in the settlement account", async () => {
+    const { servicer, token, account1, owner1, input } = await setup();
+    const settlementDollars = await paymentAccount(servicer.address, token);
     const { rpc, attempts } = fakeRpc(
-      { [account1]: { owner: owner1.address, amount: BigInt(3_000) }, [homeownerDollars]: { owner: homeowner.address, amount: BigInt(2_999_999) } },
+      { [account1]: { owner: owner1.address, amount: BigInt(3_000) }, [settlementDollars]: { owner: servicer.address, amount: BigInt(2_999_999) } },
       BigInt(3_000),
     );
-    await expect(settleHeiShares(rpc, { ...input, register: [account1] })).rejects.toThrow(/needs 3000000/);
+    await expect(settleHeiShares(rpc, { ...input, register: [account1] })).rejects.toThrow(/holders are owed 3000000: the homeowner's payment has not arrived/);
     expect(attempts).toEqual([]);
   });
 });

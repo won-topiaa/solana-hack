@@ -5,7 +5,7 @@ with its license. Versions and licenses below are read from the installed packag
 (`node_modules/<name>/package.json`). The full dependency tree, including transitive
 packages, is pinned in `package-lock.json`.
 
-Last updated: 2026-10-02 (milestone M10: web design).
+Last updated: 2026-10-02 (the user's own wallet; FHFA house price index).
 
 ## Runtime dependencies
 
@@ -20,6 +20,8 @@ Last updated: 2026-10-02 (milestone M10: web design).
 | @solana-program/system | 0.15.0 | Apache-2.0 | https://github.com/solana-program/system |
 | @solana-program/memo | 0.15.0 | Apache-2.0 | https://github.com/solana-program/memo |
 | lucide-react | 1.50.0 | ISC; icons derived from Feather are MIT (both texts in `node_modules/lucide-react/LICENSE`) | https://github.com/lucide-icons/lucide |
+| @solana/kit-plugin-wallet | 0.20.0 | MIT | https://github.com/anza-xyz/kit-plugins |
+| @solana/react | 8.4.0 | MIT | https://github.com/anza-xyz/kit |
 
 ## Development dependencies
 
@@ -51,13 +53,14 @@ https://github.com/vercel/next.js). The template's logo images and favicon were 
 
 ## Data sources and required notices
 
-`scripts/refresh-params.ts` reads three market series through the FRED API. Each source's terms
+`scripts/refresh-params.ts` reads four market series through the FRED API. Each source's terms
 require a notice wherever its data is presented (README, and the UI once these values are shown).
 
 | Data | Owner | Fetched from | Terms | Required notice / attribution |
 |---|---|---|---|---|
 | FRED API (all series below) | Federal Reserve Bank of St. Louis | https://api.stlouisfed.org | https://fred.stlouisfed.org/docs/api/terms_of_use.html | "This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis." |
 | 30- and 15-year fixed mortgage averages (MORTGAGE30US, MORTGAGE15US) | Freddie Mac, Primary Mortgage Market Survey (PMMS) | FRED | https://www.freddiemac.com/pmms ("may be used with proper attribution") | "Source: Freddie Mac Primary Mortgage Market Survey." |
+| FHFA All-Transactions House Price Index for the United States (USSTHPI) | U.S. Federal Housing Finance Agency | FRED | https://fred.stlouisfed.org/series/USSTHPI (no third-party copyright note on the series) | The FRED notice above. Used only for the settlement demo's simulated appraisal. |
 | SOFR | Federal Reserve Bank of New York | FRED | https://www.newyorkfed.org/privacy/termsofuse | "The SOFR is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the SOFR by Ownflow, does not sanction or endorse any particular republication, and has no liability for your use." |
 
 FRED's terms also ask for permission from the owner of a copyrighted third-party series; the

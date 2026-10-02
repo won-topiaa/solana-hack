@@ -52,6 +52,9 @@ export function testRegistry(): Registry {
     home_equity_loan_avg_rate: entry({ kind: "market", value: 0.0742, as_of: "2026-09-25", valid_days: 7 }),
     heloc_avg_rate_cltv_basis: entry({ kind: "market", value: 0.7, as_of: "2026-09-25", valid_days: 7 }),
     comparison_default_horizon_years: entry({ kind: "design", value: 10, valid_days: null }),
+    // FHFA index growth (FRED USSTHPI, 2024-Q2 / 2016-Q2 to 2026-Q2), for the settlement demo.
+    home_price_growth_2y: entry({ value: 0.034113, unit: "yearly home price growth", as_of: "2026-04-01", checked_at: "2026-10-02", valid_days: 250 }),
+    home_price_growth_10y: entry({ value: 0.068145, unit: "yearly home price growth", as_of: "2026-04-01", checked_at: "2026-10-02", valid_days: 250 }),
     hei_scenario_growth_rates: entry({ kind: "design", value: [0, 0.03], valid_days: null }),
     hei_term_years: entry({ kind: "design", value: { default: 10, min: 5, max: 30 }, valid_days: null }),
     heloc_first_threshold_years: entry({ kind: "design", value: 3, valid_days: null }),

@@ -5,6 +5,7 @@
 import { todayInNewYork } from "../params/dates";
 import type { LlmClient } from "./llm";
 import { systemPrompt, type Channel } from "./prompts";
+import type { SignedByWallet } from "../chain/userWallet";
 import type { AgentTool } from "./tools";
 import type { AgentMessage, CaseFile, PendingApproval, ToolCall, ToolResult } from "./types";
 
@@ -56,12 +57,16 @@ export async function sendUserMessage(caseFile: CaseFile, text: string, deps: Ag
   return runModelLoop(withMessage(caseFile, { role: "user", text }), deps);
 }
 
-/** The user answers an approval request. Only a "yes" lets the tool run. */
+/**
+ * The user answers an approval request. Only a "yes" lets the tool run. `signed` is the
+ * user's wallet signature for the step, when the step needs one.
+ */
 export async function resolveApproval(
   caseFile: CaseFile,
   approvalId: string,
   approved: boolean,
   deps: AgentDeps,
+  signed?: SignedByWallet,
 ): Promise<TurnResult> {
   const pending = caseFile.pendingApproval;
   if (!pending || pending.id !== approvalId) throw new Error(`No pending approval with id ${approvalId}`);
@@ -72,7 +77,7 @@ export async function resolveApproval(
     const tool = deps.tools.find((candidate) => candidate.declaration.name === pending.call.name);
     if (!tool) throw new Error(`Tool ${pending.call.name} is no longer available`);
     const time = currentTime(deps);
-    const outcome = await tool.run(pending.call.args, { caseFile: file, today: todayInNewYork(time), now: time });
+    const outcome = await tool.run(pending.call.args, { caseFile: file, today: todayInNewYork(time), now: time, signed });
     file = outcome.caseFile;
     output = outcome.output;
   }

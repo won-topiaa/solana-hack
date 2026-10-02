@@ -84,8 +84,17 @@ screen comes from code and from a parameter registry with sources and dates.
    on Solana* (approve) → *Issue the HEI share tokens* (approve). The panel on the right fills in:
    the comparison table, the term sheet, the hashes, and links to Solana Explorer.
 3. Open **Partner & investors**: *Run the closing and the sale*, then *Settle* (buyback after 2
-   years at flat prices, or maturity after 10 years at +3% a year). The page reads the balances back
-   from devnet and checks that every holder was paid its share and every token was burned.
+   years, or maturity after 10 years; the home's value follows the real FHFA house price index over
+   the same number of past years). The page reads the settlement transactions back from devnet and
+   checks that every holder was paid its share and every token was burned.
+
+**Use your own wallet (optional).** With Phantom (or another Wallet Standard wallet) in
+**Testnet Mode** on Solana devnet
+([how](https://docs.phantom.com/developer-powertools/testnet-mode)), click *Connect* above the chat
+after starting a case. Your wallet signs a short message that ties it to the case (no money moves),
+then signs the receipt itself, receives the closing payment or the watch token, and signs the HEI
+settlement payment. The app sends it a little devnet SOL for fees. Without a wallet, a demo wallet on
+the server signs for you.
 
 Other personas: A (watches, cash by tomorrow, keeps the sport watch), B2 (same home, repays in
 2 years → HELOC), C and D (not sure which asset). You can also start an empty case and add a watch
@@ -133,13 +142,13 @@ buyback pays exactly $144,000.069760 and $80,765.799126.
 
 | Step | On-chain | Signed by |
 |---|---|---|
-| Recommendation receipt | Memo: `ownflow receipt v1 rec=<hash> passports=<hash> registry=<version> selected=<path>` | User wallet |
+| Recommendation receipt | Memo: `ownflow receipt v1 rec=<hash> passports=<hash> registry=<version> selected=<path>` | Your own wallet (checked on-chain after it lands), or the demo wallet |
 | HEI share token | Token-2022 mint, decimals 0, supply 234,131, extensions: DefaultAccountState (frozen), PermanentDelegate (issuer, for settlement), MetadataPointer + TokenMetadata (passport and recommendation hashes; update authority removed); mint authority removed. The mint address is derived from the issuer's signature over the receipt hashes, so one receipt can only ever make one token | Issuer |
 | Watch 1-of-1 token | Token-2022 mint, supply 1, mint authority removed, metadata locked, held by the user; address derived the same way | Issuer |
 | KYC allowlist | Investor accounts thawed by the issuer; others stay frozen | Issuer |
 | Closing | Test-dollar payment to the homeowner, with a memo naming the HEI and a once-only marker account (created "with seed" from the issuer), so a second closing payment for the same HEI fails on-chain | Issuer |
 | Primary sale | One transaction: the buyer's test dollars are minted (simulated investor money), paid to the issuer, and the shares go to the buyer | Buyer + issuer |
-| Settlement | Memo, the homeowner's test dollars for the batch (simulated), then for each holder: payment from the homeowner + burn of that holder's shares. Refused once every share is burned | Homeowner + issuer |
+| Settlement | (1) The homeowner pays the payout into the HEI's own settlement account (memo names the HEI and the amount; any shortfall is minted to the homeowner first, simulated). (2) For each holder: payment from the settlement account + burn of that holder's shares, in one transaction. Refused once every share is burned | (1) Your own wallet, or the demo wallet; (2) issuer (permanent delegate) and the HEI's servicer key |
 
 **Off-chain:** addresses, names, serial numbers, photos, the case file, the comparison and the term
 sheet. Only their hashes go on-chain.
@@ -162,9 +171,11 @@ Sample records from one run (devnet):
   would hold the HEI contract and issue the shares; a vault partner would hold the watch. In the demo
   one server-held "issuer" wallet plays these roles.
 - **KYC, the appraisal, the vault intake and the stolen-watch registry.** Each is labeled
-  "Simulated" where it appears.
-- **Time.** Devnet does not wait years: the settlement page lets you pick when and at what value the
-  HEI settles; the homeowner's money for the payout is minted in the settlement transactions (labeled).
+  "Simulated" where it appears. The appraisal at settlement follows real data: the FHFA
+  All-Transactions House Price Index (FRED `USSTHPI`), growing at the index's actual yearly rate
+  over the same number of past years.
+- **Time.** Devnet does not wait years: the settlement page lets you pick when the HEI settles; the
+  homeowner's money for the payout is minted to the homeowner before it pays (labeled).
   The partner's money at closing and the investors' money are minted the same way, inside the
   transaction that spends them, so two demo runs at once never mix up the shared wallets' balances.
 - **Money.** Payments use "Demo USD (DUSD)", a devnet test token with no value and 6 decimals like
@@ -173,8 +184,9 @@ Sample records from one run (devnet):
 - **Homes in the live demo** are made-up records in RentCast's response format
   (`data/demo/properties.json`); watch values come from a made-up price table. Local runs can use
   RentCast and Plaid's sandbox with your own keys.
-- **Wallets.** The user, investors and issuer are demo wallets held by the server; your approval in
-  the app stands for the user's signature.
+- **Wallets.** The investors and the issuer are demo wallets held by the server. The user can
+  connect their own wallet (Phantom in Testnet Mode); otherwise a demo wallet stands in and your
+  approval in the app stands for your signature.
 
 ## Trust assumptions
 

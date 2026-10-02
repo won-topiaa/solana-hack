@@ -96,9 +96,16 @@ async function main() {
       `homeowner's cost ${formatPercent(settled.ownerAnnualCost * 100)} a year.`,
   );
   if (BigInt(settled.topUpMicroUsd) > BigInt(0)) {
-    console.log(`SIMULATED: the homeowner's money for the payout (savings, refinancing or a sale), minted as test dollars in the settlement transactions: ${formatMicroUsd(BigInt(settled.topUpMicroUsd))}.`);
+    console.log(`SIMULATED: the homeowner's money for the payout (savings, refinancing or a sale), minted as test dollars: ${formatMicroUsd(BigInt(settled.topUpMicroUsd))}.`);
   }
-  for (const signature of settled.signatures) console.log(`Transaction: ${explorerTxUrl(signature)}`);
+  const paidIn = settled.homeownerPayment;
+  if (paidIn) {
+    console.log(
+      `The homeowner (${paidIn.by}) paid ${formatMicroUsd(BigInt(paidIn.amountMicroUsd))} into the HEI's settlement account: ` +
+        `${paidIn.signature ? explorerTxUrl(paidIn.signature) : "(in an earlier run)"}`,
+    );
+  }
+  for (const signature of settled.signatures.filter((item) => item !== paidIn?.signature)) console.log(`Payout and burn: ${explorerTxUrl(signature)}`);
 
   section("Check (read back from devnet)");
   for (const [index, payout] of settled.payouts.entries()) {

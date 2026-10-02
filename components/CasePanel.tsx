@@ -106,12 +106,6 @@ function Documents({ documents }: { documents: NonNullable<CaseView["documents"]
   );
 }
 
-/** Who the issuer is, under the records a simulated partner made. */
-const RECORD_DETAILS: Record<string, string> = {
-  "HEI share token": "Issued by a simulated partner",
-  "Watch 1-of-1 token": "Simulated vault intake; the token is real",
-};
-
 const RECORD_ICONS: Record<string, ReactNode> = {
   "Recommendation receipt (memo)": <Receipt size={18} strokeWidth={1.75} />,
   "HEI share token": <Coins size={18} strokeWidth={1.75} />,
@@ -161,7 +155,7 @@ export function CasePanel({ view }: { view: CaseView }) {
                 key={link.url}
                 icon={RECORD_ICONS[link.label] ?? <Receipt size={18} strokeWidth={1.75} />}
                 label={link.label}
-                detail={RECORD_DETAILS[link.label]}
+                detail={link.detail}
                 url={link.url}
               />
             ))}

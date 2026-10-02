@@ -7,11 +7,13 @@
 import { ArrowRightLeft, ChevronRight, Flame, House, Lock, Receipt, RotateCcw, Scale, ShieldCheck, Sparkles, Watch } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { CaseView } from "@/lib/web/view";
-import { callApi, caseSnapshot, parseCase, serverCaseSnapshot, storeCase, subscribeCase } from "./caseStore";
+import { callApi, caseSnapshot, parseCase, postJson, serverCaseSnapshot, storeCase, subscribeCase } from "./caseStore";
 import { CasePanel } from "./CasePanel";
 import { ChatPanel } from "./ChatPanel";
 import type { PhotoForUpload } from "./photoUpload";
 import { Avatar, Badge, ErrorNote, Frame, IconBox, PrimaryButton, SecondaryButton } from "./ui";
+import { signWithWallet } from "./wallet";
+import { WalletBar } from "./WalletBar";
 
 type Persona = { id: string; title: string };
 
@@ -191,8 +193,18 @@ export function AgentApp({ personas }: { personas: Persona[] }) {
 
   const answer = (approved: boolean) =>
     void run(approved ? "Running the approved step on Solana devnet.." : "Telling the agent..", async () => {
-      if (!current?.view.approval) return;
-      storeCase(await callApi("/api/case/approval", { token: current.token, approvalId: current.view.approval.id, approved }));
+      const approval = current?.view.approval;
+      if (!current || !approval) return;
+      let signed: unknown;
+      if (approved && approval.needsWallet && current.view.wallet) {
+        // The server builds the transaction; the user's wallet signs it; the approval carries it back.
+        setBusy("Preparing the transaction for your wallet..");
+        const prepared = await postJson<{ transaction: string }>("/api/case/sign", { token: current.token, approvalId: approval.id });
+        setBusy("Sign in your wallet..");
+        signed = await signWithWallet(prepared.transaction, current.view.wallet.address);
+        setBusy("Recording on Solana devnet..");
+      }
+      storeCase(await callApi("/api/case/approval", { token: current.token, approvalId: approval.id, approved, signed }));
     });
 
   if (!current) return <StartScreen personas={personas} busy={busy} error={error} onStart={start} />;
@@ -200,7 +212,10 @@ export function AgentApp({ personas }: { personas: Persona[] }) {
   return (
     <Frame className="border-t">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 px-6 py-3">
-        <p className="truncate font-mono text-xs text-neutral-500">Case {current.view.caseId}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <p className="truncate font-mono text-xs text-neutral-500">Case {current.view.caseId}</p>
+          <WalletBar token={current.token} view={current.view} busy={Boolean(busy)} onError={setError} />
+        </div>
         <button
           type="button"
           disabled={Boolean(busy)}

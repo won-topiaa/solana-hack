@@ -62,12 +62,19 @@ export function parseCase(raw: string | null): CaseReplyJson | null {
   }
 }
 
-/** POSTs JSON to one of the app's API routes; a failed request throws with the server's message. */
-export async function callApi(path: string, body: Record<string, unknown>): Promise<CaseReplyJson> {
+/** POSTs JSON to one of the app's API routes and returns its JSON; a failed request throws with the server's message. */
+export async function postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   // The hosting's firewall limits requests per IP address (20 a minute on /api/).
   if (response.status === 429) throw new Error("Too many requests from your network. Please wait a minute and try again.");
-  const data = (await response.json().catch(() => ({}))) as Partial<CaseReplyJson> & { error?: string };
-  if (!response.ok || !data.token || !data.view) throw new Error(data.error ?? `The request failed (${response.status})`);
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? `The request failed (${response.status})`);
+  return data;
+}
+
+/** POSTs to a route that answers with the case (token and view). */
+export async function callApi(path: string, body: Record<string, unknown>): Promise<CaseReplyJson> {
+  const data = await postJson<Partial<CaseReplyJson>>(path, body);
+  if (!data.token || !data.view) throw new Error("The server's answer had no case");
   return { token: data.token, view: data.view };
 }

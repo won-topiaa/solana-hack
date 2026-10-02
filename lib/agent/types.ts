@@ -78,9 +78,18 @@ export type CaseFile = {
       watchToken?: OnchainRecord & { owner: string };
       heiSale?: SaleRecord; // the partner's steps after issuance (simulated partner, devnet)
       heiSettlement?: SettlementRecord;
+      /** A settlement payment built for the user's wallet to sign, waiting for the signature. */
+      heiSettlementPending?: { years: number; growth: number; amountMicroUsd: string; mintedMicroUsd: string; preparedAt: string };
     };
   }; // steps 6 (off-chain), 7 (on-chain, devnet) and 8 (settlement)
   messages: AgentMessage[];
   pendingApproval: PendingApproval | null;
   events: CaseEvent[];
+  /**
+   * The user's own wallet (for example Phantom), tied to the case by a signed message.
+   * Without it the server's demo wallet stands in for the user. A public address, not personal data.
+   */
+  wallet?: { address: string; connectedAt: string };
+  /** The message the wallet must sign to be tied to the case, while it waits for the signature. */
+  walletChallenge?: { address: string; message: string; issuedAt: string };
 };

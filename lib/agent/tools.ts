@@ -23,11 +23,13 @@ import { describeRecommendation } from "../recommend/display";
 import { buildPassport, buildReceipt, type AssetPassport } from "../recommend/passport";
 import { isSelectable } from "../recommend/watches";
 import type { ChainService } from "../chain/adapter";
+import type { SignedByWallet } from "../chain/userWallet";
 import { describeChainError, receiptMemo } from "../chain/solana";
 import { assetSummaries, realEstateTerms, recommend, watchLabel } from "../recommend/recommend";
 import { buildHeiTermSheet, describeTermSheet, type HeiTermSheet } from "../recommend/termSheet";
 
-export type ToolContext = { caseFile: CaseFile; today: string; now: Date };
+/** `signed`: the user's wallet signature for the step being approved, when the case has the user's own wallet. */
+export type ToolContext = { caseFile: CaseFile; today: string; now: Date; signed?: SignedByWallet };
 
 export type ToolOutcome = { output: Record<string, unknown>; caseFile: CaseFile };
 
@@ -695,21 +697,29 @@ export function createRecordReceipt(chain: ChainService): AgentTool {
     stages: ["prepare", "execute"],
     requiresApproval: true,
     describeForApproval: (_args, caseFile) =>
-      `Write the receipt for "${selectedPathLabel(caseFile)}" (hashes only) to Solana devnet, signed by your wallet. After this the chosen path is final for this case`,
-    async run(_args, { caseFile }) {
+      `Write the receipt for "${selectedPathLabel(caseFile)}" (hashes only) to Solana devnet, ` +
+      (caseFile.wallet ? "signed in your own wallet" : "signed by the demo wallet on your behalf") +
+      ". After this the chosen path is final for this case",
+    async run(_args, { caseFile, signed }) {
       const handoff = caseFile.handoff;
       if (!handoff) return { output: { done: false, problem: "Prepare the documents first." }, caseFile };
       if (documentsChanged(caseFile)) return staleDocuments(caseFile);
       if (handoff.onchain?.receipt) {
         return { output: { done: true, display: `The receipt is already on Solana devnet: ${handoff.onchain.receipt.explorerUrls[0]}` }, caseFile };
       }
+      const wallet = caseFile.wallet?.address;
+      if (wallet && !signed) {
+        return { output: { done: false, problem: "The receipt must be signed in the user's own wallet. Ask the user to approve again and sign in the wallet." }, caseFile };
+      }
       try {
-        const record = await chain.recordReceipt(receiptMemo(handoff.receipt));
+        const memo = receiptMemo(handoff.receipt);
+        const record = wallet && signed ? await chain.recordWalletReceipt(memo, wallet, signed) : await chain.recordReceipt(memo);
         const receipt = { ...handoff.receipt, txId: record.signatures[0] };
+        const signer = record.signedBy ? "Signed by your own wallet." : "Signed by the demo wallet on your behalf.";
         return {
           output: {
             done: true,
-            display: `Receipt recorded on Solana devnet in transaction ${record.signatures[0]}. Check it: ${record.explorerUrls[0]} . It holds only hashes, the parameter registry version and the chosen path id.`,
+            display: `Receipt recorded on Solana devnet in transaction ${record.signatures[0]}. ${signer} Check it: ${record.explorerUrls[0]} . It holds only hashes, the parameter registry version and the chosen path id.`,
           },
           caseFile: { ...caseFile, handoff: { ...handoff, receipt, onchain: { ...handoff.onchain, receipt: record } }, stage: "execute" },
         };
@@ -799,13 +809,13 @@ export function createIssueWatchToken(chain: ChainService): AgentTool {
       const passport = handoff.passports.find((item) => item.assetId === assetId);
       if (!passport) return { output: { done: false, problem: "The watch's passport is missing; prepare the documents again." }, caseFile };
       try {
-        const record = await chain.issueWatchToken({ assetId, passportHash: hashOf(passport), recommendationHash: handoff.receipt.recommendationHash });
+        const record = await chain.issueWatchToken({ assetId, passportHash: hashOf(passport), recommendationHash: handoff.receipt.recommendationHash, owner: caseFile.wallet?.address });
         return {
           output: {
             done: true,
             display:
               "Vault intake: SIMULATED (no watch was shipped or stored). " +
-              `Your watch's 1-of-1 token was created in your wallet on Solana devnet: ${record.explorerUrls.at(-1)} . ` +
+              `Your watch's 1-of-1 token was created on Solana devnet in ${record.owner === caseFile.wallet?.address ? "your own wallet" : "the demo wallet that stands for yours"}: ${record.explorerUrls.at(-1)} . ` +
               "Minting is closed, so no second token can ever be made. " +
               `Transactions: ${record.explorerUrls.slice(0, -1).join(" , ")} .`,
           },

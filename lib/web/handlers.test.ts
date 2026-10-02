@@ -133,12 +133,12 @@ describe("partner steps", () => {
 
   it("check the settlement inputs before touching the chain", async () => {
     const deps = depsWith([], { hei: {} as never });
-    await expect(runHeiSettlement(deps, { token: issuedCase(), years: 2, growth: 0 })).rejects.toThrow(/Run the primary sale first/);
+    await expect(runHeiSettlement(deps, { token: issuedCase(), scenario: "buyback-2y" })).rejects.toThrow(/Run the primary sale first/);
     const sold = issuedCase({ heiSale: { purchases: [] } as unknown as SaleRecord });
-    await expect(runHeiSettlement(deps, { token: sold, years: 11, growth: 0 })).rejects.toThrow(/at most 10 years/);
-    await expect(runHeiSettlement(deps, { token: sold, years: 2, growth: 0.9 })).rejects.toThrow(/between -50% and \+50%/);
+    // The browser names a scenario; years and growth stay on the server.
+    await expect(runHeiSettlement(deps, { token: sold, scenario: "years-11" })).rejects.toThrow(/Unknown settlement scenario/);
     const settled = issuedCase({ heiSale: { purchases: [] } as unknown as SaleRecord, heiSettlement: {} as SettlementRecord });
-    await expect(runHeiSettlement(deps, { token: settled, years: 2, growth: 0 })).rejects.toThrow(/already settled/);
+    await expect(runHeiSettlement(deps, { token: settled, scenario: "buyback-2y" })).rejects.toThrow(/already settled/);
     await expect(runHeiSale(deps, { token: sold })).rejects.toThrow(/already ran/);
   });
 });

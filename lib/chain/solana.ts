@@ -27,6 +27,7 @@ import {
   signTransactionMessageWithSigners,
   some,
   type Address,
+  type Base64EncodedWireTransaction,
   type Instruction,
   type KeyPairSigner,
   type Lamports,
@@ -155,15 +156,24 @@ export async function sendInstructions(rpc: DevnetRpc, feePayer: TransactionSign
     (m) => appendTransactionMessageInstructions(instructions, m),
   );
   const signed = await signTransactionMessageWithSigners(message);
-  const signature = getSignatureFromTransaction(signed);
+  return sendWireTransaction(rpc, getBase64EncodedWireTransaction(signed), getSignatureFromTransaction(signed), blockhash.lastValidBlockHeight);
+}
+
+/** Sends a signed transaction (base64 wire format) and waits until it is confirmed. */
+export async function sendWireTransaction(rpc: DevnetRpc, wire: Base64EncodedWireTransaction, signature: Signature, lastValidBlockHeight?: bigint): Promise<Signature> {
   try {
-    await rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: "base64" }).send();
+    await rpc.sendTransaction(wire, { encoding: "base64" }).send();
   } catch (error) {
     // A retried send of the same signed transaction can find it already processed: that is success.
     if (!alreadyProcessed(error)) throw error;
   }
-  await waitForConfirmation(rpc, signature, blockhash.lastValidBlockHeight);
+  await waitForConfirmation(rpc, signature, lastValidBlockHeight);
   return signature;
+}
+
+/** Waits for a transaction someone else sent (a wallet that sends its own transactions). */
+export async function confirmSignature(rpc: DevnetRpc, signature: Signature): Promise<void> {
+  await waitForConfirmation(rpc, signature);
 }
 
 /** The program logs of a rejected transaction (from the RPC's simulation), to tell why it failed. */
@@ -265,6 +275,19 @@ export async function oldestSignatures(rpc: DevnetRpc, account: Address, count: 
 export async function accountExists(rpc: DevnetRpc, account: Address): Promise<boolean> {
   const { value } = await rpc.getAccountInfo(account, { encoding: "base64" }).send();
   return value !== null;
+}
+
+/** What a user's wallet gets for fees, and the balance below which it gets it. */
+export const USER_FEE_SOL = 0.01;
+
+/**
+ * Gives a user's wallet devnet SOL for its own transaction fees when it is low, so a
+ * person trying the demo with their own wallet does not need a faucet first.
+ */
+export async function ensureFeeSol(rpc: DevnetRpc, issuer: KeyPairSigner, wallet: Address): Promise<Signature | null> {
+  if ((await getSolBalance(rpc, wallet)) >= USER_FEE_SOL / 2) return null;
+  await requireFunds(rpc, issuer.address);
+  return sendDevnetSol(rpc, issuer, wallet, USER_FEE_SOL);
 }
 
 /** The receipt as a memo: hashes, versions and the chosen path only. No personal data. */

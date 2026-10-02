@@ -132,7 +132,13 @@ export function ChatPanel({ view, busy, suggestions, onSend, onAnswer }: Props) 
                 Your approval is needed
               </div>
               <p className="px-1 text-sm leading-relaxed text-neutral-300">{view.approval.summary}</p>
-              <p className="px-1 text-xs text-neutral-500">Devnet demo: after you approve, the app signs with a demo wallet. Nothing runs before you choose.</p>
+              <p className="px-1 text-xs text-neutral-500">
+                {view.approval.needsWallet
+                  ? "Devnet: your wallet will show the transaction to sign. Nothing runs before you sign."
+                  : view.wallet
+                    ? "Devnet: after you approve, the simulated partner signs this step. Nothing runs before you choose."
+                    : "Devnet demo: after you approve, the app signs with a demo wallet. Nothing runs before you choose."}
+              </p>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -140,7 +146,7 @@ export function ChatPanel({ view, busy, suggestions, onSend, onAnswer }: Props) 
                   onClick={() => onAnswer(true)}
                   className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:opacity-40"
                 >
-                  Approve
+                  {view.approval.needsWallet ? "Approve and sign in wallet" : "Approve"}
                 </button>
                 <button
                   type="button"

@@ -1,18 +1,31 @@
 // The HEI after its shares are issued, on devnet (milestone M8): KYC, the partner's
 // payment at closing, the primary sale, and the settlement. Used by scripts/chain-hei.ts
 // and by the web app's partner page, so both run the same steps.
+// The homeowner is either a demo wallet the server holds, or the user's own wallet
+// (Phantom): then the closing pays that wallet and the user signs the settlement payment.
 // Simulated: the partner (the issuer wallet), KYC, the appraisal, and the homeowner's
 // money for the settlement. Payments use test dollars with no value.
 // Amounts are kept as strings of micro-dollars, so the records stay plain JSON.
 
-import { address, type KeyPairSigner } from "@solana/kit";
+import { address, type Address, type KeyPairSigner } from "@solana/kit";
 import { purchaseCostMicroUsd, sumMicroUsd, tokenPriceMicroUsd, toMicroUsd } from "../calc/sale";
 import { homeValueAfterYears, settle } from "../calc/settlement";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import { buyShares, payAtClosing } from "./heiSale";
-import { receivedIn, settleHeiShares } from "./heiSettlement";
-import { loadOrCreateTestDollar, paymentBalance } from "./payment";
-import { allowlistInvestor, openFrozenAccount, readSupply, readTokenAccount, requireFunds, transactionLogs, type DevnetRpc } from "./solana";
+import { homeownerPaymentInstructions, homeownerPaymentMemo, planSettlement, receivedIn, servicerFor, settleHeiShares } from "./heiSettlement";
+import { loadOrCreateTestDollar, mintTestDollarsInstruction, openPaymentAccountInstruction, paymentBalance, type PaymentToken } from "./payment";
+import {
+  allowlistInvestor,
+  ensureFeeSol,
+  openFrozenAccount,
+  readSupply,
+  readTokenAccount,
+  requireFunds,
+  sendInstructions,
+  transactionLogs,
+  type DevnetRpc,
+} from "./solana";
+import { buildForWallet, changeFor, landWalletTransaction, readParsedTransaction, walletStandIn, type SignedByWallet, type UnsignedForWallet } from "./userWallet";
 
 /** What the sale and the settlement need from the term sheet. */
 export type HeiDeal = Pick<
@@ -22,7 +35,7 @@ export type HeiDeal = Pick<
 
 export type HeiWallets = {
   issuer: KeyPairSigner; // plays the partner (issuer and its treasury)
-  homeowner: KeyPairSigner;
+  homeowner: KeyPairSigner; // the demo homeowner, when the user has not connected a wallet
   investors: { name: string; wallet: KeyPairSigner }[]; // KYC-approved buyers, in buying order
   noKyc: KeyPairSigner; // tries to buy and must be refused
 };
@@ -43,12 +56,15 @@ export type SettlementRecord = {
   trigger: "buyback" | "maturity";
   years: number;
   growth: number;
+  scenario?: string; // where the growth comes from (the FHFA index), for the page
   homeValueUsd: number; // the (simulated) appraisal
   payoutMicroUsd: string;
   uncappedPayoutUsd: number;
   capApplied: boolean;
   ownerAnnualCost: number;
-  topUpMicroUsd: string; // SIMULATED: the homeowner's money for the payout, minted in the settlement transactions
+  topUpMicroUsd: string; // SIMULATED: test dollars minted to the homeowner for the payout (savings, refinancing or a sale)
+  /** The homeowner's payment into the HEI's settlement account (missing in records made before it existed). */
+  homeownerPayment?: { by: "user wallet" | "demo wallet"; owner: string; amountMicroUsd: string; signature: string | null }; // null: paid in an earlier, interrupted run
   payouts: { owner: string; tokens: string; payoutMicroUsd: string; receivedMicroUsd: string }[];
   paidMicroUsd: string;
   supplyLeft: string;
@@ -86,10 +102,11 @@ export function sharesToBuy(allocated: bigint, alreadyHeld: bigint): bigint {
 export async function runPrimarySale(
   rpc: DevnetRpc,
   wallets: HeiWallets,
-  input: { heiMint: string; treasury: string; deal: HeiDeal },
+  input: { heiMint: string; treasury: string; deal: HeiDeal; homeowner?: string }, // homeowner: the user's own wallet, if connected
   now: () => Date = () => new Date(),
 ): Promise<SaleRecord> {
-  const { issuer, homeowner, noKyc } = wallets;
+  const { issuer, noKyc } = wallets;
+  const homeowner = input.homeowner ? address(input.homeowner) : wallets.homeowner.address;
   const heiMint = address(input.heiMint);
   const treasury = address(input.treasury);
   const price = tokenPriceMicroUsd(input.deal.tokenPriceUsd);
@@ -117,7 +134,7 @@ export async function runPrimarySale(
   const toBuy = amounts.map((amount, index) => sharesToBuy(amount, held[index]));
 
   // Closing: the partner pays the homeowner the net cash, once.
-  const closing = await payAtClosing(rpc, issuer, token, homeowner.address, netCash, heiMint);
+  const closing = await payAtClosing(rpc, issuer, token, homeowner, netCash, heiMint);
 
   // The buyer without KYC, while the treasury still has shares, so only KYC can stop it.
   let rejected: SaleRecord["rejected"];
@@ -168,26 +185,9 @@ export async function runPrimarySale(
   };
 }
 
-/**
- * Settlement after `years` (buyback, or maturity at the end of the term) with the home
- * valued by a simulated appraisal at `growth` a year. Pays every holder and burns its
- * shares in the same transaction, then reads back from those transactions what each
- * holder received, and the supply left.
- */
-export async function runSettlement(
-  rpc: DevnetRpc,
-  wallets: HeiWallets,
-  input: { heiMint: string; deal: HeiDeal; sale: SaleRecord; years: number; growth: number },
-  now: () => Date = () => new Date(),
-): Promise<SettlementRecord> {
-  const { issuer, homeowner } = wallets;
-  const { deal, years, growth } = input;
+/** The settlement's numbers before anything moves: the simulated appraisal and the capped payout. */
+export function settlementTerms(deal: HeiDeal, years: number, growth: number) {
   if (!(years > 0 && years <= deal.termYears)) throw new RangeError(`Settle after more than 0 and at most ${deal.termYears} years`);
-  const heiMint = address(input.heiMint);
-  await requireFunds(rpc, issuer.address);
-  const token = await loadOrCreateTestDollar(rpc, issuer);
-  if (token.mint !== input.sale.paymentMint) throw new Error("The test dollar changed since the sale");
-
   const homeValueUsd = homeValueAfterYears(deal.homeValueUsd, growth, years);
   const result = settle({
     grossInvestmentUsd: deal.grossInvestmentUsd,
@@ -197,51 +197,163 @@ export async function runSettlement(
     years,
     homeValueAtSettlementUsd: homeValueUsd,
   });
-  const payout = toMicroUsd(result.payoutUsd);
-  const trigger = years >= deal.termYears ? "maturity" : "buyback";
+  const trigger: SettlementRecord["trigger"] = years >= deal.termYears ? "maturity" : "buyback";
+  return { homeValueUsd, result, payoutMicroUsd: toMicroUsd(result.payoutUsd), trigger };
+}
+
+type SettlementInput = { heiMint: string; deal: HeiDeal; sale: SaleRecord; years: number; growth: number; scenario?: string };
+
+/** What the settlement needs from the chain: the test dollar, the holders' plan, and the settlement account. */
+async function settlementState(rpc: DevnetRpc, wallets: HeiWallets, input: SettlementInput) {
+  const terms = settlementTerms(input.deal, input.years, input.growth);
+  const heiMint = address(input.heiMint);
+  await requireFunds(rpc, wallets.issuer.address);
+  const token = await loadOrCreateTestDollar(rpc, wallets.issuer);
+  if (token.mint !== input.sale.paymentMint) throw new Error("The test dollar changed since the sale");
+  const plan = await planSettlement(rpc, {
+    heiMint,
+    register: input.sale.register.map((account) => address(account)),
+    payoutMicroUsd: terms.payoutMicroUsd,
+    tokenSupply: BigInt(input.deal.tokenSupply),
+  });
+  const servicer = await servicerFor(wallets.issuer, heiMint);
+  const received = await paymentBalance(rpc, token, servicer.address);
+  // What the homeowner still has to pay in (0 when an earlier run already paid).
+  const due = received >= plan.paidMicroUsd ? BigInt(0) : plan.paidMicroUsd - received;
+  return { terms, heiMint, token, plan, servicer, due };
+}
+
+/** A payment the user's wallet must sign, with what was minted to it first (SIMULATED). */
+export type WalletPaymentRequest = UnsignedForWallet & { owner: string; amountMicroUsd: string; mintedMicroUsd: string };
+
+/**
+ * Before the user's wallet pays: gives it devnet SOL for the fee if low, mints the test
+ * dollars it is missing (SIMULATED: savings, refinancing or a sale), opens the settlement
+ * account, and builds the payment for the wallet to sign. null when nothing is due.
+ */
+export async function prepareWalletSettlementPayment(
+  rpc: DevnetRpc,
+  wallets: HeiWallets,
+  input: SettlementInput & { wallet: string },
+): Promise<WalletPaymentRequest | null> {
+  const { issuer } = wallets;
+  const { heiMint, token, servicer, due } = await settlementState(rpc, wallets, input);
+  if (due === BigInt(0)) return null;
+  const wallet = address(input.wallet);
+  await ensureFeeSol(rpc, issuer, wallet);
+  const balance = await paymentBalance(rpc, token, wallet);
+  const minted = balance >= due ? BigInt(0) : due - balance;
+  await sendInstructions(rpc, issuer, [
+    await openPaymentAccountInstruction(issuer, servicer.address, token),
+    await openPaymentAccountInstruction(issuer, wallet, token),
+    ...(minted > BigInt(0) ? [await mintTestDollarsInstruction(token, issuer, wallet, minted)] : []),
+  ]);
+  const steps = await homeownerPaymentInstructions({ homeowner: walletStandIn(wallet), servicer: servicer.address, token, amountMicroUsd: due, memo: homeownerPaymentMemo(heiMint, due) });
+  return { ...(await buildForWallet(rpc, wallet, steps)), owner: wallet, amountMicroUsd: String(due), mintedMicroUsd: String(minted) };
+}
+
+/** The homeowner's side of the settlement: a payment already signed by the user's wallet, or the demo wallet. */
+export type HomeownerSide = { kind: "demo" } | { kind: "wallet"; wallet: string; signed?: SignedByWallet; mintedMicroUsd: string }; // signed: missing when nothing was due
+
+/** Lands the user's signed payment and checks on-chain that the settlement account received what was due. */
+async function landWalletPayment(rpc: DevnetRpc, side: Extract<HomeownerSide, { kind: "wallet" }>, token: PaymentToken, servicer: Address, heiMint: Address, due: bigint) {
+  const wallet = address(side.wallet);
+  if (!side.signed) throw new Error("The homeowner's wallet has not signed the settlement payment; nobody was paid");
+  const signature = await landWalletTransaction(rpc, side.signed, wallet);
+  const parsed = await readParsedTransaction(rpc, signature);
+  const ok =
+    parsed.signers.includes(wallet) &&
+    parsed.memos.includes(homeownerPaymentMemo(heiMint, due)) &&
+    changeFor(parsed, token.mint, servicer) === due &&
+    changeFor(parsed, token.mint, wallet) === -due;
+  if (!ok) throw new Error(`Transaction ${signature} is not the settlement payment that was asked for; nobody was paid`);
+  return signature;
+}
+
+/**
+ * Settlement after `years` (buyback, or maturity at the end of the term) with the home
+ * valued by a simulated appraisal at `growth` a year. The homeowner pays into the HEI's
+ * settlement account (the user's own signed payment, or the demo wallet); then each
+ * holder is paid and its shares are burned in the same transaction. Finally it reads
+ * back from those transactions what each holder received, and the supply left.
+ */
+export async function runSettlement(
+  rpc: DevnetRpc,
+  wallets: HeiWallets,
+  input: SettlementInput & { homeowner?: HomeownerSide },
+  now: () => Date = () => new Date(),
+): Promise<SettlementRecord> {
+  const { issuer } = wallets;
+  const side: HomeownerSide = input.homeowner ?? { kind: "demo" };
+  const { terms, heiMint, token, plan, servicer, due } = await settlementState(rpc, wallets, input);
+  const { homeValueUsd, result, trigger } = terms;
+  const payout = terms.payoutMicroUsd;
+
+  // The homeowner pays in, unless an earlier run already did.
+  const owner = side.kind === "wallet" ? side.wallet : wallets.homeowner.address;
+  let paymentSignature: string | null = null;
+  let minted = BigInt(0);
+  if (due > BigInt(0)) {
+    if (side.kind === "wallet") {
+      paymentSignature = await landWalletPayment(rpc, side, token, servicer.address, heiMint, due);
+      minted = BigInt(side.mintedMicroUsd);
+    } else {
+      // SIMULATED: the demo homeowner's money, minted in the same transaction that pays it in.
+      const steps = await homeownerPaymentInstructions({
+        homeowner: wallets.homeowner,
+        servicer: servicer.address,
+        token,
+        amountMicroUsd: due,
+        memo: homeownerPaymentMemo(heiMint, due),
+        fundFrom: issuer,
+      });
+      paymentSignature = await sendInstructions(rpc, issuer, [await openPaymentAccountInstruction(issuer, servicer.address, token), ...steps]);
+      minted = due;
+    }
+  }
 
   const owners = input.sale.purchases.map((purchase) => address(purchase.owner));
-  const memo = `ownflow settlement v1 mint=${heiMint} trigger=${trigger} years=${years} value=${homeValueUsd.toFixed(2)} payout=${payout} registry=${deal.registryVersion}`;
+  const memo = `ownflow settlement v1 mint=${heiMint} trigger=${trigger} years=${input.years} value=${homeValueUsd.toFixed(2)} payout=${payout} registry=${input.deal.registryVersion}`;
   const run = await settleHeiShares(rpc, {
-    homeowner,
     issuer,
     heiMint,
     token,
     register: input.sale.register.map((account) => address(account)),
     payoutMicroUsd: payout,
-    tokenSupply: BigInt(deal.tokenSupply),
+    tokenSupply: BigInt(input.deal.tokenSupply),
     memo,
-    fundHomeowner: true, // SIMULATED: the homeowner's money (savings, refinancing or a sale)
   });
 
   // Read back: each holder received its share in the settlement transactions, and no shares are left.
   const receivedBy = await receivedIn(rpc, run.batches, token.mint);
   const payouts: SettlementRecord["payouts"] = [];
   let correct = run.payouts.length > 0;
-  for (const owner of owners) {
-    const expected = run.payouts.find((item) => item.owner === owner);
-    const received = receivedBy.get(owner) ?? BigInt(0);
+  for (const holder of owners) {
+    const expected = run.payouts.find((item) => item.owner === holder);
+    const received = receivedBy.get(holder) ?? BigInt(0);
     correct &&= received === (expected?.payoutMicroUsd ?? BigInt(0));
-    payouts.push({ owner, tokens: String(expected?.tokens ?? BigInt(0)), payoutMicroUsd: String(expected?.payoutMicroUsd ?? BigInt(0)), receivedMicroUsd: String(received) });
+    payouts.push({ owner: holder, tokens: String(expected?.tokens ?? BigInt(0)), payoutMicroUsd: String(expected?.payoutMicroUsd ?? BigInt(0)), receivedMicroUsd: String(received) });
   }
   const supplyLeft = await readSupply(rpc, heiMint);
   correct &&= supplyLeft === BigInt(0);
 
   return {
     trigger,
-    years,
-    growth,
+    years: input.years,
+    growth: input.growth,
+    scenario: input.scenario,
     homeValueUsd,
     payoutMicroUsd: String(payout),
     uncappedPayoutUsd: result.uncappedPayoutUsd,
     capApplied: result.capApplied,
     ownerAnnualCost: result.ownerAnnualCost,
-    topUpMicroUsd: String(run.paidMicroUsd),
+    topUpMicroUsd: String(minted),
+    homeownerPayment: { by: side.kind === "wallet" ? "user wallet" : "demo wallet", owner, amountMicroUsd: String(plan.paidMicroUsd), signature: paymentSignature },
     payouts,
     paidMicroUsd: String(run.paidMicroUsd),
     supplyLeft: String(supplyLeft),
     correct,
-    signatures: run.signatures,
+    signatures: [...(paymentSignature ? [paymentSignature] : []), ...run.signatures],
     memo,
     at: now().toISOString(),
   };

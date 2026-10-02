@@ -1,6 +1,7 @@
-// Refreshes the market values in data/params.json from FRED: SOFR and the
-// Freddie Mac PMMS 30- and 15-year mortgage rates. Product, design and
-// reference values are never changed here (they need a person).
+// Refreshes the market values in data/params.json from FRED: SOFR, the Freddie Mac
+// PMMS 30- and 15-year mortgage rates, and the yearly home price growth from the FHFA
+// house price index. Product, design and reference values are never changed here
+// (they need a person).
 //
 // Usage: npm run params:refresh             writes data/params.json
 //        npm run params:refresh -- --dry-run  only prints what would change
@@ -10,23 +11,36 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { todayInNewYork } from "../lib/params/dates";
 import { formatRegistry, parseRegistry } from "../lib/params/load";
-import { applyMarketUpdates, FRED_SERIES, latestObservation, type MarketUpdate } from "../lib/params/refresh";
+import {
+  applyMarketUpdates,
+  FRED_HOME_PRICE_SERIES,
+  FRED_SERIES,
+  HOME_PRICE_GROWTH_YEARS,
+  indexObservations,
+  latestObservation,
+  yearlyIndexGrowth,
+  type MarketUpdate,
+} from "../lib/params/refresh";
 import { freshnessOf } from "../lib/params/staleness";
 
 const REGISTRY_PATH = resolve(process.cwd(), "data/params.json");
 const FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations";
 
-async function fetchLatest(seriesId: string, apiKey: string) {
+async function fetchObservations(seriesId: string, apiKey: string, limit: number): Promise<unknown> {
   const url = new URL(FRED_OBSERVATIONS_URL);
   url.searchParams.set("series_id", seriesId);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("file_type", "json");
   url.searchParams.set("sort_order", "desc");
-  url.searchParams.set("limit", "10");
+  url.searchParams.set("limit", String(limit));
   const response = await fetch(url);
   // The URL holds the API key, so errors name the series instead of printing the URL.
   if (!response.ok) throw new Error(`FRED ${seriesId}: HTTP ${response.status}`);
-  return latestObservation(await response.json());
+  return response.json();
+}
+
+async function fetchLatest(seriesId: string, apiKey: string) {
+  return latestObservation(await fetchObservations(seriesId, apiKey, 10));
 }
 
 async function main() {
@@ -44,6 +58,17 @@ async function main() {
     const observation = await fetchLatest(seriesId, apiKey);
     if (observation) updates.push({ key, observation });
     else console.warn(`${seriesId}: no numeric observation in the latest 10 rows`);
+  }
+  // Quarterly index: 11 years of quarters reach the 10-year comparison.
+  const homePrices = indexObservations(await fetchObservations(FRED_HOME_PRICE_SERIES, apiKey, 50));
+  for (const [key, years] of Object.entries(HOME_PRICE_GROWTH_YEARS)) {
+    const growth = yearlyIndexGrowth(homePrices, years);
+    if (!growth) {
+      console.warn(`${FRED_HOME_PRICE_SERIES}: no quarter ${years} years before the latest`);
+      continue;
+    }
+    console.log(`${key}: index ${growth.from.value} (${growth.from.date}) -> ${growth.to.value} (${growth.to.date}) = ${(growth.value * 100).toFixed(2)}% a year`);
+    updates.push({ key, observation: { date: growth.date, value: growth.value } });
   }
 
   const result = applyMarketUpdates(registry, updates, today);

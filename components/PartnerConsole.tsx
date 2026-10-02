@@ -8,20 +8,16 @@
 import { ArrowRightLeft, CircleCheck, Flame, Landmark, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import { callApi, caseSnapshot, parseCase, serverCaseSnapshot, storeCase, subscribeCase } from "./caseStore";
+import { callApi, caseSnapshot, parseCase, postJson, serverCaseSnapshot, storeCase, subscribeCase, type CaseReplyJson } from "./caseStore";
 import { ChainRecord, DevnetTag, ErrorNote, Frame, IconBox, Lines, PrimaryButton, SimulatedTag } from "./ui";
-
-/** Ready-made settlement cases; the first shows the yearly cap, the second the share of growth. */
-const SCENARIOS = [
-  { id: "buyback-2", label: "Buyback after 2 years, prices flat", note: "The 20% a year cap applies", years: 2, growth: 0 },
-  { id: "maturity-10", label: "Maturity after 10 years, prices up 3% a year", note: "Holders get their share of the growth", years: 10, growth: 0.03 },
-] as const;
+import { shortAddress, signWithWallet } from "./wallet";
+import { WalletBar } from "./WalletBar";
 
 function linkIcon(label: string): ReactNode {
   if (label.startsWith("Closing")) return <Landmark size={18} strokeWidth={1.75} />;
   if (label.includes("purchase")) return <ArrowRightLeft size={18} strokeWidth={1.75} />;
   if (label.includes("without KYC")) return <ShieldCheck size={18} strokeWidth={1.75} />;
-  if (label.startsWith("Settlement")) return <Flame size={18} strokeWidth={1.75} />;
+  if (label.startsWith("Settlement") || label.startsWith("Payout")) return <Flame size={18} strokeWidth={1.75} />;
   return <Wallet size={18} strokeWidth={1.75} />;
 }
 
@@ -43,22 +39,45 @@ function Step({ number, title, children }: { number: number; title: string; chil
 export function PartnerConsole() {
   const raw = useSyncExternalStore(subscribeCase, caseSnapshot, serverCaseSnapshot);
   const current = useMemo(() => parseCase(raw), [raw]);
-  const [scenario, setScenario] = useState<string>(SCENARIOS[0].id);
+  const [picked, setPicked] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const hei = current?.view.hei;
 
-  async function run(label: string, path: string, body: Record<string, unknown>) {
-    if (!current) return;
+  async function attempt(label: string, action: () => Promise<void>) {
     setBusy(label);
     setError(null);
     try {
-      storeCase(await callApi(path, { token: current.token, ...body }));
+      await action();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Something went wrong");
     } finally {
       setBusy(null);
     }
+  }
+
+  function run(label: string, path: string, body: Record<string, unknown>) {
+    return attempt(label, async () => {
+      if (current) storeCase(await callApi(path, { token: current.token, ...body }));
+    });
+  }
+
+  /** With the user's own wallet: the server prepares the payment, the wallet signs it, then the settlement runs. */
+  function settleWithWallet(scenario: string) {
+    return attempt("Preparing your settlement payment on devnet..", async () => {
+      const wallet = current?.view.wallet;
+      if (!current || !wallet) return;
+      type Prepared = CaseReplyJson & { payment: { transaction: string } | null };
+      const prepared = await postJson<Prepared>("/api/hei/settlement/prepare", { token: current.token, scenario });
+      storeCase({ token: prepared.token, view: prepared.view });
+      let signed: unknown;
+      if (prepared.payment) {
+        setBusy("Sign the payment in your wallet..");
+        signed = await signWithWallet(prepared.payment.transaction, wallet.address);
+      }
+      setBusy("Settling on devnet: your payment, then paying holders and burning shares..");
+      storeCase(await callApi("/api/hei/settlement", { token: prepared.token, scenario, signed }));
+    });
   }
 
   const header = (
@@ -89,10 +108,14 @@ export function PartnerConsole() {
     );
   }
 
-  const chosen = SCENARIOS.find((item) => item.id === scenario) ?? SCENARIOS[0];
+  // The scenarios come from the server: years and the real home price index growth stay in code.
+  const chosen = hei.scenarios.find((item) => item.id === picked) ?? hei.scenarios[0];
   return (
     <Frame className="border-t">
       {header}
+      <div className="border-b border-neutral-800 px-6 py-3 sm:px-10">
+        <WalletBar token={current.token} view={current.view} busy={Boolean(busy)} onError={setError} />
+      </div>
       {(error || busy) && (
         <div className="space-y-3 border-b border-neutral-800 px-6 py-4 sm:px-10">
           {error && <ErrorNote>{error}</ErrorNote>}
@@ -118,7 +141,7 @@ export function PartnerConsole() {
           <>
             <div className="grid gap-px overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-800 sm:grid-cols-3">
               {[
-                { icon: <Landmark size={18} strokeWidth={1.75} />, title: "Closing", text: "The partner pays the homeowner the net cash, from its own money.", tag: <SimulatedTag /> },
+                { icon: <Landmark size={18} strokeWidth={1.75} />, title: "Closing", text: `The partner pays ${hei.usesWallet ? "your wallet" : "the homeowner"} the net cash, from its own money.`, tag: <SimulatedTag /> },
                 { icon: <ShieldCheck size={18} strokeWidth={1.75} />, title: "KYC", text: "Two investors pass and their share accounts open; a third stays frozen.", tag: <SimulatedTag label="Simulated KYC" /> },
                 { icon: <ArrowRightLeft size={18} strokeWidth={1.75} />, title: "Purchases", text: "Dollars and shares move in one transaction; the buyer without KYC is refused by the token.", tag: null },
               ].map((item) => (
@@ -168,16 +191,20 @@ export function PartnerConsole() {
         ) : (
           <>
             <p className="mb-5 max-w-[720px] text-sm leading-relaxed text-neutral-400">
-              The homeowner pays the capped payout; in the same transaction each holder receives its share and the issuer burns that holder&apos;s tokens. No time
-              passes on devnet: pick when and at what value the HEI settles. <SimulatedTag label="Simulated time and appraisal" />
+              {hei.usesWallet && current.view.wallet
+                ? `Your wallet (${shortAddress(current.view.wallet.address)}) pays the capped payout into this HEI's settlement account; you sign it in your wallet. `
+                : "The homeowner (demo wallet) pays the capped payout into this HEI's settlement account. "}
+              Then, for each holder, one transaction pays its share and burns its tokens. No time passes on devnet: pick when the HEI settles; the home&apos;s
+              value then follows the real FHFA house price index over that many past years.{" "}
+              <SimulatedTag label="Simulated time and appraisal" />
             </p>
             <fieldset className="mb-6 grid gap-3 sm:grid-cols-2" disabled={!hei.canSettle || Boolean(busy)}>
-              {SCENARIOS.filter((item) => item.years <= hei.termYears).map((item) => (
+              {hei.scenarios.map((item) => (
                 <label
                   key={item.id}
-                  className={`cursor-pointer rounded-2xl border p-4 transition ${scenario === item.id ? "border-neutral-500 bg-neutral-900" : "border-neutral-800 bg-neutral-950 hover:border-neutral-700"}`}
+                  className={`cursor-pointer rounded-2xl border p-4 transition ${chosen?.id === item.id ? "border-neutral-500 bg-neutral-900" : "border-neutral-800 bg-neutral-950 hover:border-neutral-700"}`}
                 >
-                  <input type="radio" name="scenario" value={item.id} checked={scenario === item.id} onChange={() => setScenario(item.id)} className="sr-only" />
+                  <input type="radio" name="scenario" value={item.id} checked={chosen?.id === item.id} onChange={() => setPicked(item.id)} className="sr-only" />
                   <span className="block text-sm font-medium text-neutral-100">{item.label}</span>
                   <span className="mt-1 block text-xs text-neutral-500">{item.note}</span>
                 </label>
@@ -185,10 +212,14 @@ export function PartnerConsole() {
             </fieldset>
             <PrimaryButton
               arrow
-              disabled={Boolean(busy) || !hei.canSettle}
+              disabled={Boolean(busy) || !hei.canSettle || !chosen}
               onClick={() => {
-                if (window.confirm(`Settle on Solana devnet: ${chosen.label}? The homeowner's demo wallet pays and the shares are burned.`)) {
-                  void run("Settling on devnet: paying holders and burning shares..", "/api/hei/settlement", { years: chosen.years, growth: chosen.growth });
+                if (!chosen) return;
+                if (hei.usesWallet) {
+                  const question = `Settle on Solana devnet: ${chosen.label}? Your wallet will ask you to sign the payment (test dollars; any shortfall is minted to it first, simulated).`;
+                  if (window.confirm(question)) void settleWithWallet(chosen.id);
+                } else if (window.confirm(`Settle on Solana devnet: ${chosen.label}? The homeowner's demo wallet pays and the shares are burned.`)) {
+                  void run("Settling on devnet: paying holders and burning shares..", "/api/hei/settlement", { scenario: chosen.id });
                 }
               }}
             >

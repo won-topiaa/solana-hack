@@ -1,7 +1,11 @@
-// HEI settlement on devnet (milestone M8). The homeowner pays each holder its share
-// of the payout and, in the same transaction, the issuer burns that holder's tokens
-// as the mint's permanent delegate (owner, 2026-10-02). A holder is never burned
-// without being paid, and a burned holder cannot be paid twice.
+// HEI settlement on devnet (milestone M8; Phantom, 2026-10-02). The homeowner pays the
+// payout once into this HEI's own settlement account; then, for each holder, one
+// transaction pays the holder its share from that account and burns its tokens, the
+// issuer acting as the mint's permanent delegate (owner, 2026-10-02). A holder is never
+// burned without being paid, and a burned holder cannot be paid twice.
+// The settlement account belongs to a keypair the issuer derives for this HEI, so only
+// the issuer (the simulated partner, as servicer) can pay out of it, and nothing else
+// ever goes in or out: its balance tells whether the homeowner has paid.
 // Delegate: https://solana.com/docs/tokens/extensions/permanent-delegate
 
 import type { Address, Instruction, KeyPairSigner, Signature, TransactionSigner } from "@solana/kit";
@@ -9,7 +13,7 @@ import { getAddMemoInstruction } from "@solana-program/memo";
 import { getBurnCheckedInstruction } from "@solana-program/token-2022";
 import { splitPayout, sumMicroUsd, type PayoutShare } from "../calc/sale";
 import { mintTestDollarsInstruction, openPaymentAccountInstruction, paymentAccount, paymentBalance, paymentInstruction, type PaymentToken } from "./payment";
-import { readSupply, readTokenAccount, sendInstructions, type DevnetRpc } from "./solana";
+import { issuerDerivedSigner, readSupply, readTokenAccount, sendInstructions, type DevnetRpc } from "./solana";
 
 /** A share account with its owner and balance. */
 export type ShareHolding = { account: Address; owner: Address; tokens: bigint };
@@ -42,54 +46,67 @@ export function payoutsFor(payoutMicroUsd: bigint, holdings: ShareHolding[], tok
   });
 }
 
+/** The servicer of one HEI: holds the homeowner's payment until it is paid out to the holders. */
+export async function servicerFor(issuer: KeyPairSigner, heiMint: Address): Promise<KeyPairSigner> {
+  return issuerDerivedSigner(issuer, `ownflow hei servicer v1 mint=${heiMint}`);
+}
+
+/** The memo on the homeowner's payment (no personal data). */
+export function homeownerPaymentMemo(heiMint: Address, amountMicroUsd: bigint): string {
+  return `ownflow settlement payment v1 mint=${heiMint} amount=${amountMicroUsd}`;
+}
+
 /**
- * One settlement transaction for up to HOLDERS_PER_TRANSACTION holders. With
- * `fundHomeowner` the homeowner's money for this batch is minted first, in the same
- * transaction (SIMULATED: savings, refinancing or a sale).
+ * The homeowner's payment into the settlement account. With `fundFrom` the homeowner's
+ * money is minted first in the same transaction (SIMULATED: savings, refinancing or a sale).
  */
-export async function settlementInstructions(input: {
+export async function homeownerPaymentInstructions(input: {
   homeowner: TransactionSigner;
+  servicer: Address;
+  token: PaymentToken;
+  amountMicroUsd: bigint;
+  memo: string;
+  fundFrom?: TransactionSigner; // the test dollar's mint authority (the issuer)
+}): Promise<Instruction[]> {
+  const funding = input.fundFrom
+    ? [
+        await openPaymentAccountInstruction(input.fundFrom, input.homeowner.address, input.token),
+        await mintTestDollarsInstruction(input.token, input.fundFrom, input.homeowner.address, input.amountMicroUsd),
+      ]
+    : [];
+  return [getAddMemoInstruction({ memo: input.memo }), ...funding, await paymentInstruction(input.token, input.homeowner, input.servicer, input.amountMicroUsd)];
+}
+
+/** One payout transaction for up to HOLDERS_PER_TRANSACTION holders: pay from the settlement account, burn. */
+export async function settlementInstructions(input: {
+  servicer: TransactionSigner; // owns the settlement account
   issuer: TransactionSigner; // the permanent delegate
   heiMint: Address;
   token: PaymentToken;
   payouts: HolderPayout[];
   memo: string;
-  fundHomeowner: boolean;
 }): Promise<Instruction[]> {
   const steps: Instruction[] = [getAddMemoInstruction({ memo: input.memo })];
-  if (input.fundHomeowner) {
-    const batchTotal = sumMicroUsd(input.payouts.map((payout) => payout.payoutMicroUsd));
-    steps.push(await mintTestDollarsInstruction(input.token, input.issuer, input.homeowner.address, batchTotal));
-  }
   for (const payout of input.payouts) {
-    steps.push(await paymentInstruction(input.token, input.homeowner, payout.owner, payout.payoutMicroUsd));
+    steps.push(await paymentInstruction(input.token, input.servicer, payout.owner, payout.payoutMicroUsd));
     steps.push(getBurnCheckedInstruction({ account: payout.account, mint: input.heiMint, authority: input.issuer, amount: payout.tokens, decimals: 0 }));
   }
   return steps;
 }
 
-/** `batches` are the transactions that paid and burned; `signatures` also has the account openings before them. */
-export type SettlementRun = { payouts: HolderPayout[]; paidMicroUsd: bigint; signatures: Signature[]; batches: Signature[] };
+/** What the settlement will pay: each current holder's share, and their sum (what the homeowner pays). */
+export type SettlementPlan = { payouts: HolderPayout[]; paidMicroUsd: bigint };
 
 /**
- * Settles every holder in the register. `tokenSupply` is the supply issued (N), so the
- * price per token stays the same if an earlier run stopped half-way. `memo` describes
- * the settlement (no personal data); each transaction carries it with its batch number.
+ * Reads the holders and checks them before anyone pays: the shares must not be burned
+ * already, and the register must hold the whole on-chain supply. `tokenSupply` is the
+ * supply issued (N), so the price per token stays the same if an earlier run stopped
+ * half-way.
  */
-export async function settleHeiShares(
+export async function planSettlement(
   rpc: DevnetRpc,
-  input: {
-    homeowner: KeyPairSigner;
-    issuer: KeyPairSigner;
-    heiMint: Address;
-    token: PaymentToken;
-    register: Address[];
-    payoutMicroUsd: bigint;
-    tokenSupply: bigint;
-    memo: string;
-    fundHomeowner: boolean; // SIMULATED homeowner money, minted in each batch
-  },
-): Promise<SettlementRun> {
+  input: { heiMint: Address; register: Address[]; payoutMicroUsd: bigint; tokenSupply: bigint },
+): Promise<SettlementPlan> {
   const supply = await readSupply(rpc, input.heiMint);
   // Every share burned: an earlier run settled this HEI. Paying "nobody" again must not look like a settlement.
   if (supply === BigInt(0)) throw new Error("This HEI is already settled on-chain: every share is burned");
@@ -99,39 +116,56 @@ export async function settleHeiShares(
     throw new Error(`The register holds ${held} shares but ${supply} exist: some holder is missing, so nobody was paid`);
   }
   const payouts = payoutsFor(input.payoutMicroUsd, holdings, input.tokenSupply);
-  const paid = sumMicroUsd(payouts.map((payout) => payout.payoutMicroUsd));
-  if (!input.fundHomeowner) {
-    const balance = await paymentBalance(rpc, input.token, input.homeowner.address);
-    if (balance < paid) throw new Error(`The homeowner has ${balance} micro-dollars but the settlement needs ${paid}`);
+  return { payouts, paidMicroUsd: sumMicroUsd(payouts.map((payout) => payout.payoutMicroUsd)) };
+}
+
+/** `batches` are the transactions that paid and burned; `signatures` also has the account openings before them. */
+export type SettlementRun = { payouts: HolderPayout[]; paidMicroUsd: bigint; signatures: Signature[]; batches: Signature[] };
+
+/**
+ * Pays every holder from the settlement account and burns its shares. Refuses before
+ * paying anyone unless the plan still holds and the homeowner's payment is in the
+ * settlement account. `memo` describes the settlement (no personal data); each
+ * transaction carries it with its batch number.
+ */
+export async function settleHeiShares(
+  rpc: DevnetRpc,
+  input: {
+    issuer: KeyPairSigner;
+    heiMint: Address;
+    token: PaymentToken;
+    register: Address[];
+    payoutMicroUsd: bigint;
+    tokenSupply: bigint;
+    memo: string;
+  },
+): Promise<SettlementRun> {
+  const plan = await planSettlement(rpc, input);
+  const servicer = await servicerFor(input.issuer, input.heiMint);
+  const balance = await paymentBalance(rpc, input.token, servicer.address);
+  if (balance < plan.paidMicroUsd) {
+    throw new Error(`The settlement account has ${balance} micro-dollars but the holders are owed ${plan.paidMicroUsd}: the homeowner's payment has not arrived`);
   }
 
-  // Holders who never held the payment token need an account to be paid into (and the homeowner one to pay from).
+  // Holders who never held the payment token need an account to be paid into.
   const signatures: Signature[] = [];
   const unopened: Address[] = [];
-  for (const owner of [input.homeowner.address, ...payouts.map((payout) => payout.owner)]) {
-    if (!(await readTokenAccount(rpc, await paymentAccount(owner, input.token)))) unopened.push(owner);
+  for (const payout of plan.payouts) {
+    if (!(await readTokenAccount(rpc, await paymentAccount(payout.owner, input.token)))) unopened.push(payout.owner);
   }
   for (const owners of chunk(unopened, HOLDERS_PER_TRANSACTION)) {
     const opens = await Promise.all(owners.map((owner) => openPaymentAccountInstruction(input.issuer, owner, input.token)));
     signatures.push(await sendInstructions(rpc, input.issuer, opens));
   }
 
-  const batches = chunk(payouts, HOLDERS_PER_TRANSACTION);
+  const batches = chunk(plan.payouts, HOLDERS_PER_TRANSACTION);
   const sent: Signature[] = [];
   for (const [index, batch] of batches.entries()) {
     const memo = `${input.memo} batch=${index + 1}/${batches.length}`;
-    const steps = await settlementInstructions({
-      homeowner: input.homeowner,
-      issuer: input.issuer,
-      heiMint: input.heiMint,
-      token: input.token,
-      payouts: batch,
-      memo,
-      fundHomeowner: input.fundHomeowner,
-    });
+    const steps = await settlementInstructions({ servicer, issuer: input.issuer, heiMint: input.heiMint, token: input.token, payouts: batch, memo });
     sent.push(await sendInstructions(rpc, input.issuer, steps));
   }
-  return { payouts, paidMicroUsd: paid, signatures: [...signatures, ...sent], batches: sent };
+  return { payouts: plan.payouts, paidMicroUsd: plan.paidMicroUsd, signatures: [...signatures, ...sent], batches: sent };
 }
 
 /**

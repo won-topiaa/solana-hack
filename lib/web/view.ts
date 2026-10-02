@@ -13,18 +13,35 @@ import { cashText, costText, frozenNote } from "../recommend/display";
 import { DEMO_PERSONAS } from "../recommend/personas";
 import { watchLabel } from "../recommend/recommend";
 import { describeTermSheet } from "../recommend/termSheet";
+import { settlementScenarios } from "../recommend/settlementScenarios";
 import { isSelectable } from "../recommend/watches";
 
 export const NOT_ADVICE = "This is not investment or financial advice.";
 
-export type Link = { label: string; url: string };
+export type Link = { label: string; url: string; detail?: string };
+
+/** Steps the user's own wallet signs, by the tool that asks for approval. */
+const WALLET_SIGNED_TOOLS = ["record_receipt_onchain"];
+
+/** True when approving the pending step means signing in the user's own wallet. */
+export function approvalNeedsWallet(caseFile: CaseFile): boolean {
+  return Boolean(caseFile.wallet && caseFile.pendingApproval && WALLET_SIGNED_TOOLS.includes(caseFile.pendingApproval.call.name));
+}
+
+/** The wallet can change only until something is on-chain; after that the records name it. */
+export function walletLocked(caseFile: CaseFile): boolean {
+  const onchain = caseFile.handoff?.onchain;
+  return Boolean(onchain && Object.keys(onchain).length > 0);
+}
 
 export type CaseView = {
   caseId: string;
   persona: { id: string; title: string } | null; // a made-up demo persona, when one was loaded
   stage: Stage;
   chat: { role: "user" | "agent"; text: string }[];
-  approval: { id: string; summary: string } | null;
+  approval: { id: string; summary: string; needsWallet: boolean } | null;
+  /** The user's own wallet, when connected; null: the demo wallet stands in. `locked`: on-chain records name it. */
+  wallet: { address: string; locked: boolean } | null;
   goal: string[] | null;
   assets: { id: string; title: string; lines: string[]; simulated: string[] }[];
   comparison: {
@@ -59,6 +76,8 @@ export type CaseView = {
     canSell: boolean;
     canSettle: boolean;
     termYears: number;
+    usesWallet: boolean; // the user's own wallet is the homeowner: it signs the settlement payment
+    scenarios: { id: string; label: string; note: string }[]; // home prices follow the real FHFA index
     sale: { lines: string[]; links: Link[] } | null;
     settlement: { lines: string[]; links: Link[]; correct: boolean } | null;
   } | null;
@@ -219,26 +238,35 @@ function onchainOf(caseFile: CaseFile): Link[] {
   const onchain = caseFile.handoff?.onchain;
   if (!onchain) return [];
   const links: Link[] = [];
-  if (onchain.receipt) links.push({ label: "Recommendation receipt (memo)", url: onchain.receipt.explorerUrls[0] });
-  if (onchain.heiShares?.mint) links.push({ label: "HEI share token", url: explorerAddressUrl(onchain.heiShares.mint) });
-  if (onchain.watchToken?.mint) links.push({ label: "Watch 1-of-1 token", url: explorerAddressUrl(onchain.watchToken.mint) });
+  const yours = (owner: string | undefined) => (owner && owner === caseFile.wallet?.address ? "your wallet" : "the demo wallet");
+  if (onchain.receipt) {
+    links.push({ label: "Recommendation receipt (memo)", url: onchain.receipt.explorerUrls[0], detail: `Signed by ${onchain.receipt.signedBy ? "your wallet" : "the demo wallet"}` });
+  }
+  if (onchain.heiShares?.mint) links.push({ label: "HEI share token", url: explorerAddressUrl(onchain.heiShares.mint), detail: "Issued by a simulated partner" });
+  if (onchain.watchToken?.mint) {
+    links.push({ label: "Watch 1-of-1 token", url: explorerAddressUrl(onchain.watchToken.mint), detail: `Simulated vault intake; the token is in ${yours(onchain.watchToken.owner)}` });
+  }
   return links;
 }
 
-function heiOf(caseFile: CaseFile): CaseView["hei"] {
+function heiOf(caseFile: CaseFile, registry: Registry): CaseView["hei"] {
   const onchain = caseFile.handoff?.onchain;
   const sheet = caseFile.handoff?.termSheet;
   if (!onchain?.heiShares || !sheet) return null;
   const sale = onchain.heiSale;
   const settled = onchain.heiSettlement;
+  const homeowner = caseFile.wallet ? "your wallet" : "the homeowner (demo wallet)";
+  const paidIn = settled?.homeownerPayment;
   return {
     canSell: !sale,
     canSettle: Boolean(sale) && !settled,
     termYears: sheet.termYears,
+    usesWallet: Boolean(caseFile.wallet),
+    scenarios: settlementScenarios(registry, sheet.termYears).map(({ id, label, note }) => ({ id, label, note })),
     sale: sale
       ? {
           lines: [
-            `Closing: the partner paid the homeowner ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (simulated partner; its test dollars are minted in the same transaction).`,
+            `Closing: the partner paid ${homeowner} ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (simulated partner; its test dollars are minted in the same transaction).`,
             ...sale.kyc.map((item) => `${item.name}: KYC approved (simulated); share account opened.`),
             `A buyer without KYC was refused on-chain ("${sale.rejected.reason}"); no money moved.`,
             ...sale.purchases.map((purchase) => `${purchase.name} bought ${BigInt(purchase.tokens).toLocaleString("en-US")} shares for ${formatMicroUsd(BigInt(purchase.costMicroUsd))} (simulated investor; test dollars minted in the purchase).`),
@@ -255,16 +283,21 @@ function heiOf(caseFile: CaseFile): CaseView["hei"] {
     settlement: settled
       ? {
           lines: [
-            `${settled.trigger === "maturity" ? "Maturity" : "Buyback"} after ${settled.years} years; home value ${formatUsd(settled.homeValueUsd)} (simulated appraisal).`,
+            `${settled.trigger === "maturity" ? "Maturity" : "Buyback"} after ${settled.years} years; home value ${formatUsd(settled.homeValueUsd)} (simulated appraisal${settled.scenario ? " that follows the real index" : ""}).`,
+            ...(settled.scenario ? [`${settled.scenario}.`] : []),
             `Payout ${formatMicroUsd(BigInt(settled.payoutMicroUsd))}${settled.capApplied ? ` (the ${formatPercent(sheet.investorReturnCapPerYear * 100)} a year cap applies; uncapped ${formatUsd(settled.uncappedPayoutUsd)})` : ""}; homeowner's cost ${formatPercent(settled.ownerAnnualCost * 100)} a year.`,
-            ...(BigInt(settled.topUpMicroUsd) > BigInt(0) ? [`Simulated: the homeowner's ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} for the payout, minted as test dollars in the settlement transactions.`] : []),
+            ...(BigInt(settled.topUpMicroUsd) > BigInt(0) ? [`Simulated: ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} of the homeowner's money (savings, refinancing or a sale), minted as test dollars.`] : []),
+            ...(paidIn ? [`${paidIn.by === "user wallet" ? "Your wallet" : "The homeowner (demo wallet)"} paid ${formatMicroUsd(BigInt(paidIn.amountMicroUsd))} into the HEI's settlement account.`] : []),
             ...settled.payouts.map(
               (payout, index) =>
                 `${caseFile.handoff?.onchain?.heiSale?.purchases[index]?.name ?? "Holder"}: ${BigInt(payout.tokens).toLocaleString("en-US")} shares burned, paid ${formatMicroUsd(BigInt(payout.receivedMicroUsd))}.`,
             ),
             `Shares left: ${settled.supplyLeft}. ${settled.correct ? "Every holder was paid its share." : "Check failed: see the transactions."}`,
           ],
-          links: settled.signatures.map((signature, index) => ({ label: `Settlement transaction ${index + 1}`, url: explorerTxUrl(signature) })),
+          links: settled.signatures.map((signature, index) => ({
+            label: signature === paidIn?.signature ? "Homeowner's payment" : `Payout and burn ${paidIn?.signature ? index : index + 1}`,
+            url: explorerTxUrl(signature),
+          })),
           correct: settled.correct,
         }
       : null,
@@ -278,12 +311,13 @@ export function buildView(caseFile: CaseFile, registry: Registry): CaseView {
     persona: personaOf(caseFile),
     stage: caseFile.stage,
     chat: chatOf(caseFile),
-    approval: caseFile.pendingApproval ? { id: caseFile.pendingApproval.id, summary: caseFile.pendingApproval.summary } : null,
+    approval: caseFile.pendingApproval ? { id: caseFile.pendingApproval.id, summary: caseFile.pendingApproval.summary, needsWallet: approvalNeedsWallet(caseFile) } : null,
+    wallet: caseFile.wallet ? { address: caseFile.wallet.address, locked: walletLocked(caseFile) } : null,
     goal: goalOf(caseFile, new Map(assets.map((asset) => [asset.id, asset.title]))),
     assets,
     comparison: comparisonOf(caseFile, registry),
     documents: documentsOf(caseFile),
     onchain: onchainOf(caseFile),
-    hei: heiOf(caseFile),
+    hei: heiOf(caseFile, registry),
   };
 }

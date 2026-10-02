@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getRegistry } from "./load";
-import { applyMarketUpdates, FRED_SERIES, latestObservation, nextRegistryVersion } from "./refresh";
+import { applyMarketUpdates, FRED_SERIES, indexObservations, latestObservation, nextRegistryVersion, yearlyIndexGrowth } from "./refresh";
 import { entry, makeRegistry } from "./test-fixtures";
 
 // Shape of a FRED series/observations JSON response (https://fred.stlouisfed.org/docs/api/fred/series_observations.html).
@@ -78,5 +78,30 @@ describe("FRED_SERIES", () => {
     for (const key of Object.keys(FRED_SERIES)) {
       expect(params[key]?.kind).toBe("market");
     }
+  });
+});
+
+describe("home price growth from the FHFA index", () => {
+  const fred = {
+    observations: [
+      { date: "2016-04-01", value: "372.35" },
+      { date: "2024-04-01", value: "673.16" },
+      { date: "2026-01-01", value: "712.2" },
+      { date: "2026-04-01", value: "719.87" },
+      { date: "2026-07-01", value: "." },
+    ],
+  };
+
+  it("is the yearly rate between the latest quarter and the same quarter years before", () => {
+    const observations = indexObservations(fred);
+    expect(observations.at(-1)).toEqual({ date: "2026-04-01", value: 719.87 });
+    // (719.87 / 673.16)^(1/2) - 1 and (719.87 / 372.35)^(1/10) - 1
+    expect(yearlyIndexGrowth(observations, 2)).toMatchObject({ date: "2026-04-01", value: 0.034113, from: { date: "2024-04-01" } });
+    expect(yearlyIndexGrowth(observations, 10)).toMatchObject({ date: "2026-04-01", value: 0.068145, from: { date: "2016-04-01" } });
+  });
+
+  it("gives nothing when that earlier quarter is missing", () => {
+    expect(yearlyIndexGrowth(indexObservations(fred), 5)).toBeNull();
+    expect(yearlyIndexGrowth([], 2)).toBeNull();
   });
 });

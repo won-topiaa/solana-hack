@@ -1,20 +1,21 @@
 // ChainService on Solana devnet. The issuer wallet plays the partners (HEI issuer,
 // watch vault) and pays fees; the user wallet signs the receipt. Devnet only.
 
-import type { KeyPairSigner } from "@solana/kit";
+import { address, type KeyPairSigner } from "@solana/kit";
+import { getAddMemoInstruction } from "@solana-program/memo";
 import type { ChainService, HeiIssueInput, OnchainRecord, WatchIssueInput } from "./adapter";
 import {
   createHeiShareMint,
   createWatchToken,
+  ensureFeeSol,
   explorerAddressUrl,
   explorerTxUrl,
-  getSolBalance,
   recordReceiptMemo,
   requireFunds,
-  sendDevnetSol,
   type DevnetRpc,
   type TokenInfo,
 } from "./solana";
+import { buildForWallet, landWalletTransaction, readParsedTransaction, walletStandIn } from "./userWallet";
 
 /** What the HEI share token says about itself on-chain: hashes and generic labels, no personal data. */
 export function heiTokenInfo(input: HeiIssueInput): TokenInfo {
@@ -49,9 +50,6 @@ export function issuanceLabel(input: { passportHash: string; recommendationHash:
   return `rec=${input.recommendationHash} passport=${input.passportHash}`;
 }
 
-/** Enough SOL for the user wallet to pay for a few memo transactions. */
-const USER_FEE_SOL = 0.01;
-
 export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSigner; user: KeyPairSigner }, now: () => Date = () => new Date()): ChainService {
   const record = (signatures: string[], mint?: string): OnchainRecord => ({
     network: "devnet",
@@ -64,11 +62,25 @@ export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSign
   return {
     async recordReceipt(memo) {
       await requireFunds(rpc, wallets.issuer.address);
-      if ((await getSolBalance(rpc, wallets.user.address)) < USER_FEE_SOL / 2) {
-        await sendDevnetSol(rpc, wallets.issuer, wallets.user.address, USER_FEE_SOL);
-      }
+      await ensureFeeSol(rpc, wallets.issuer, wallets.user.address);
       const signature = await recordReceiptMemo(rpc, wallets.user, memo);
       return record([signature]);
+    },
+
+    async prepareWalletReceipt(memo, wallet) {
+      const owner = address(wallet);
+      await ensureFeeSol(rpc, wallets.issuer, owner);
+      return buildForWallet(rpc, owner, [getAddMemoInstruction({ memo, signers: [walletStandIn(owner)] })]);
+    },
+
+    async recordWalletReceipt(memo, wallet, signed) {
+      const owner = address(wallet);
+      const signature = await landWalletTransaction(rpc, signed, owner);
+      const parsed = await readParsedTransaction(rpc, signature);
+      if (!parsed.signers.includes(owner) || !parsed.memos.includes(memo)) {
+        throw new Error(`Transaction ${signature} is not the receipt that was asked for`);
+      }
+      return { ...record([signature]), signedBy: owner };
     },
 
     async issueHeiShares(input: HeiIssueInput) {
@@ -77,10 +89,11 @@ export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSign
       return { ...record(created.signatures, created.mint), treasury: created.treasury };
     },
 
-    async issueWatchToken(input: WatchIssueInput) {
+    async issueWatchToken(input: WatchIssueInput & { owner?: string }) {
       await requireFunds(rpc, wallets.issuer.address);
-      const created = await createWatchToken(rpc, wallets.issuer, wallets.user.address, watchTokenInfo(input), issuanceLabel(input));
-      return { ...record(created.signatures, created.mint), owner: wallets.user.address };
+      const owner = input.owner ? address(input.owner) : wallets.user.address;
+      const created = await createWatchToken(rpc, wallets.issuer, owner, watchTokenInfo(input), issuanceLabel(input));
+      return { ...record(created.signatures, created.mint), owner };
     },
   };
 }
