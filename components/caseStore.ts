@@ -51,6 +51,8 @@ export function parseCase(raw: string | null): CaseReplyJson | null {
 /** POSTs JSON to one of the app's API routes; a failed request throws with the server's message. */
 export async function callApi(path: string, body: Record<string, unknown>): Promise<CaseReplyJson> {
   const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  // The hosting's firewall limits requests per IP address (20 a minute on /api/).
+  if (response.status === 429) throw new Error("Too many requests from your network. Please wait a minute and try again.");
   const data = (await response.json().catch(() => ({}))) as Partial<CaseReplyJson> & { error?: string };
   if (!response.ok || !data.token || !data.view) throw new Error(data.error ?? `The request failed (${response.status})`);
   return { token: data.token, view: data.view };
