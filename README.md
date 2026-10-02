@@ -2,60 +2,268 @@
 
 **Cash flow from what you own.**
 
-A neutral AI agent for US users who need cash. It compares every way to turn a home or a
-luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
-to the next step (including tokenization on Solana) only after explicit approval.
+Ownflow is a neutral AI agent for people in the United States who need cash. You say how much you
+need and by when. It looks at what you own (a home, luxury watches), compares **every** way to raise
+the cash, including plain options such as a HELOC or a sale, and recommends the cheapest suitable
+path by fixed, published rules. Only after your explicit approval does it record a verifiable
+receipt and issue tokens on Solana.
 
-> Status: in development (milestone M9: a web app where the agent takes the cash goal and the assets, compares every path, recommends one with fixed rules, prepares the term sheet, asset passports and a hashed receipt, and after your approval records the receipt and issues tokens on Solana devnet; a partner page runs the HEI sale and settlement with a simulated partner and test dollars).
->
-> Not investment or financial advice.
+- **Live demo (Solana devnet):** https://solana-hack.vercel.app
+- **Source:** this repository (MIT license)
+
+> Not investment or financial advice. This is a demo on Solana **devnet**: tokens and test dollars
+> have no value. Partners (issuer, vault, KYC, appraisal, stolen-watch registry) are simulated and
+> marked "Simulated" in the app. Use made-up details.
+
+---
+
+## The problem
+
+- **Options are scattered, and each seller pitches its own.** A homeowner who needs cash can take a
+  HELOC, a home equity loan, a home equity investment (HEI), or (at 62+) look at a reverse mortgage.
+  A watch owner can sell to a dealer, sell on a marketplace, or borrow against the watch. Nobody
+  lines them up side by side for *this* person's amount, deadline and budget.
+- **HEI costs are hard to compare.** With an HEI you sell a share of your home's future value. What
+  you pay back depends on when you settle and how prices move, so the yearly cost can be low or very
+  high, and the offer looks nothing like a loan's APR.
+- **Tokenizing an asset does not create cash by itself.** Someone still has to buy the tokens, only
+  eligible buyers should be able to hold them, and the payout at the end has to be fair and final.
+
+## What Ownflow does
+
+1. **Goal.** Amount, date, repayment horizon, monthly budget, assets to keep, and which asset you
+   want to use: your home, a watch, or "not sure".
+2. **Assets.** A home by address (value range and an owner check); the mortgage balance (typed, or
+   read from the lender through Plaid's sandbox when run locally). Watches from photos: the model
+   reads maker, model, reference, box and papers; the serial number is kept private and only a
+   salted hash is used. A stolen-watch check (simulated).
+3. **Compare every path** for the goal, with cash now, monthly payment, total cost over the horizon,
+   whether you keep the asset, and the main risks:
+
+   | Home | Watches |
+   |---|---|
+   | HELOC (interest-only) | Dealer sale (about 70–90% of market value, same day) |
+   | Home equity loan (equal monthly payments) | Marketplace sale (6.5% seller fee) |
+   | **HEI, split into tokens on Solana** | Loan against the watch (65–75% of value by category, 30–180 days) |
+   | Reverse mortgage (information only, 62+) | **Vault the watch and issue a 1-of-1 token** |
+
+4. **Recommend by fixed rules**, and say which rules fired:
+
+   | Rule | When | Then |
+   |---|---|---|
+   | RE-1 | You will repay within 3 years | HELOC or home equity loan first (the cheaper one that fits your budget) |
+   | RE-2 | Your monthly budget is below the HELOC's interest-only payment | HEI is the candidate (no monthly payments) |
+   | RE-3 | You are 62 or older | Reverse mortgage shown for information |
+   | W-1 | Cash needed within about a day, willing to sell | Dealer sale |
+   | W-2 | You can wait and want the best price | Marketplace sale |
+   | W-3 | You want the watch back within 180 days | Loan against the watch |
+   | X-1 | You were not sure which asset to use and neither covers the goal alone | Watches plus a HELOC for the rest |
+
+   Otherwise the lowest total cost wins, with the HEI counted at its costlier price scenario. You may
+   still choose another path, including a tokenization path; the receipt records both what was
+   recommended and what you chose.
+5. **Prepare the handoff documents** (off-chain): the HEI term sheet, an *asset passport* per asset
+   (identifiers as salted hashes, evidence hashes, valuation), and a *recommendation receipt* (the
+   hash of the recommendation, the hash of the passports, and the version of the parameter registry
+   behind every number).
+6. **On-chain steps, one at a time, each after your approval:** record the receipt; then issue the
+   HEI share tokens, or the watch's 1-of-1 token after a (simulated) vault intake.
+7. **Partner steps** (simulated partner): KYC, the payment to the homeowner at closing, the primary
+   sale to investors, and the settlement that pays every holder and burns their tokens.
+
+The model (Google Gemini) handles the conversation and reads photos. **It never computes or
+invents a number:** in the web app it writes no figures at all, and in the terminal it quotes
+code-made text word for word. All money math is in tested, pure functions, and every figure on
+screen comes from code and from a parameter registry with sources and dates.
+
+## Try the live demo
+
+1. Open https://solana-hack.vercel.app and load **Persona B** (a made-up homeowner who needs
+   $150,000, plans to repay in 10 years and cannot make monthly payments).
+2. Click the suggested messages: *Compare my options* → *Prepare the documents* → *Record the receipt
+   on Solana* (approve) → *Issue the HEI share tokens* (approve). The panel on the right fills in:
+   the comparison table, the term sheet, the hashes, and links to Solana Explorer.
+3. Open **Partner & investors**: *Run the closing and the sale*, then *Settle* (buyback after 2
+   years at flat prices, or maturity after 10 years at +3% a year). The page reads the balances back
+   from devnet and checks that every holder was paid its share and every token was burned.
+
+Other personas: A (watches, cash by tomorrow, keeps the sport watch), B2 (same home, repays in
+2 years → HELOC), C and D (not sure which asset). You can also start an empty case and add a watch
+photo; try the made-up warranty card in `data/demo/watch-photos/demo-warranty-card.png`.
+
+## The HEI math (persona B)
+
+Home value V = $1,000,000, cash needed C = $150,000. Investor discount 33.3%, fee 3.9% (minimum
+$2,000), investor return capped at 20% a year.
+
+- Investors pay G = C / (1 − 3.9%) = **$156,087.41** (fee $6,087.41).
+- One token = 1/1,000,000 of the home's value at settlement; price today = $1 × (1 − 1/3) =
+  **$0.666667**.
+- Tokens issued N = round(G / price) = **234,131**, i.e. **23.41%** of the home's future value.
+- At settlement after t years the homeowner pays min(N × V_t / 1,000,000, G × 1.2^t).
+
+| Settle after | Home prices | Homeowner pays | Cost per year |
+|---|---|---|---|
+| 2 years | flat | $224,765.87 (cap applies) | 22.41% |
+| 10 years | flat | $234,131 | 4.55% |
+| 10 years | +3% a year | $314,652 | 7.69% |
+
+That is why the rules send a 2-year borrower to a HELOC (RE-1) and a 10-year borrower with no
+monthly budget to the HEI (RE-2). On-chain, money moves in micro-dollars: each holder gets
+floor(payout × tokens / N), so with two investors holding 150,000 and 84,131 tokens a 2-year
+buyback pays exactly $144,000.069760 and $80,765.799126.
+
+## Why a blockchain
+
+- **A recommendation you can check later.** The receipt (hashes and the registry version, no
+  personal data) is written on-chain when you approve, so anyone holding the documents can prove what
+  was recommended, on which numbers, and what you chose.
+- **Compliance enforced by the token.** HEI share accounts start **frozen**; only accounts the issuer
+  opens after KYC can hold shares. A buyer without KYC is refused by the token program itself.
+- **Delivery against payment.** Each purchase is one transaction: the buyer's dollars and the shares
+  move together, or nothing moves.
+- **A fair, final settlement.** In one transaction per batch, the homeowner pays each holder its
+  pro-rata share and that holder's tokens are burned. No holder is burned without being paid.
+- **Fixed supply and locked metadata.** After minting, the HEI supply can never grow, and the
+  passport and recommendation hashes written into the token can never be changed.
+- **Liquidity for a watch in a vault.** The 1-of-1 token stands for the vaulted watch; it can be
+  sold or used as collateral, and burning it releases the watch.
+
+## What goes on-chain (Solana devnet)
+
+| Step | On-chain | Signed by |
+|---|---|---|
+| Recommendation receipt | Memo: `ownflow receipt v1 rec=<hash> passports=<hash> registry=<version> selected=<path>` | User wallet |
+| HEI share token | Token-2022 mint, decimals 0, supply 234,131, extensions: DefaultAccountState (frozen), PermanentDelegate (issuer, for settlement), MetadataPointer + TokenMetadata (passport and recommendation hashes; update authority removed); mint authority removed | Issuer |
+| Watch 1-of-1 token | Token-2022 mint, supply 1, mint authority removed, metadata locked, held by the user | Issuer |
+| KYC allowlist | Investor accounts thawed by the issuer; others stay frozen | Issuer |
+| Closing | Test-dollar payment to the homeowner, with a memo naming the HEI | Issuer |
+| Primary sale | One transaction: buyer's test dollars → issuer, shares → buyer | Buyer + issuer |
+| Settlement | Memo, then for each holder: payment from the homeowner + burn of that holder's shares | Homeowner + issuer |
+
+**Off-chain:** addresses, names, serial numbers, photos, the case file, the comparison and the term
+sheet. Only their hashes go on-chain.
+
+Sample records from one run (devnet):
+[receipt](https://explorer.solana.com/tx/3hqvpnyuB929teDwEuUFcrmaFn6WFs3EDLqfeGmtcPYNNU9ar3ihCHcJFb8qFsUKdZ7Tem1TL2Q23wbEXUMp5GAC?cluster=devnet) ·
+[HEI share token](https://explorer.solana.com/address/5KNj2WDiru1BAnpgCEKhUwrdYMNcGirz5xhBCbodpAXY?cluster=devnet) ·
+[closing](https://explorer.solana.com/tx/BcFDBtHWCw258bju9MSpAcvUWkjD8CJ7oB1KCR6AZPo147BYJM39am4eWqhf2nv3dBDNZdmbT8niuV5xjQAqFja?cluster=devnet) ·
+[purchase 1](https://explorer.solana.com/tx/2KEB6EXyAhhjRXNrYA1ji35ugKqPHjuMPr7JwMUEr6HdaqGYd4vxof88hJR6Xw2mpEngVzJyWoa8wyvcjaKPxVf9?cluster=devnet) ·
+[purchase 2](https://explorer.solana.com/tx/3opmvWQ7iBTxANgmc1M3zQ95ahxi1bf7u9cLi5EDBMYnfvYDupdyxyyTV5oZWm1rsbjWmc1nNjwLgTVUhEKXCF5F?cluster=devnet) ·
+[account without KYC (frozen)](https://explorer.solana.com/address/3pDq2UP9k7G8sdvixn8fPdoopmrBMrdMjJxxyvPZWq5u?cluster=devnet) ·
+[settlement](https://explorer.solana.com/tx/5yqHLX3qiRTrQkhseQDQcnTHMRfKndVav2B1GBVeEkDvCf4pv9Crz6nxijS27yrKeXHnpbj7WYzSWbYySY7cB6aL?cluster=devnet) ·
+[watch 1-of-1 token](https://explorer.solana.com/address/H9LZ68ws32rG1YSuFR2UdVNyjyqm7MSB3dLzFXFpp1av?cluster=devnet) ·
+[test dollar](https://explorer.solana.com/address/EkYSihFm4a6uz6yVDsYUg9nzJdXTFEayyPr9uM1XHfks?cluster=devnet)
+(devnet can be reset, which would remove them).
+
+## What is simulated
+
+- **The partners.** Ownflow is a connector, not the issuer or the custodian. A licensed partner
+  would hold the HEI contract and issue the shares; a vault partner would hold the watch. In the demo
+  one server-held "issuer" wallet plays these roles.
+- **KYC, the appraisal, the vault intake and the stolen-watch registry.** Each is labeled
+  "Simulated" where it appears.
+- **Time.** Devnet does not wait years: the settlement page lets you pick when and at what value the
+  HEI settles; the homeowner's money for the payout is minted to the demo wallet (labeled).
+- **Money.** Payments use "Demo USD (DUSD)", a devnet test token with no value and 6 decimals like
+  USDC. Circle's devnet USDC faucet gives 20 USDC per address every 2 hours, far below a $150,000
+  sale; the code takes the payment token as data so a real stablecoin could replace it.
+- **Homes in the live demo** are made-up records in RentCast's response format
+  (`data/demo/properties.json`); watch values come from a made-up price table. Local runs can use
+  RentCast and Plaid's sandbox with your own keys.
+- **Wallets.** The user, investors and issuer are demo wallets held by the server; your approval in
+  the app stands for the user's signature.
+
+## Trust assumptions
+
+- **The issuer is trusted** in this design: it keeps the freeze authority (to run the KYC allowlist)
+  and is the permanent delegate (to burn shares at settlement). The token program would let it burn
+  without paying; Ownflow's code only burns in the same transaction as the payment.
+- **The registry is trusted to be accurate.** Every number comes from `data/params.json`, where each
+  value has a source, a date and a validity window. A recommendation is refused when a value it uses
+  is out of date. For the judging period the deployed demo freezes the values on one date and says so
+  under the comparison.
+- **The model is not trusted with numbers.** In the web app it never writes figures, hashes or
+  links; the panel shows code-made text. Tools that act (on-chain steps, a bank connection, a
+  registry check) never run before you approve them.
+- **The server keeps no case.** Your case travels in your browser as a token sealed with AES-256-GCM;
+  the browser can neither read nor change it.
+- **Legal status.** HEIs and HEI-backed tokens raise consumer-credit and securities questions. This
+  is a proof of concept; a real launch would go through a licensed partner and legal review.
+
+## Limits on the public demo
+
+40 messages and 6 photos per case, on-chain steps paused when the demo wallet runs low on devnet
+SOL, and a per-IP rate limit on the API. Devnet's public RPC can be busy; calls are retried, and the
+sale can be run again safely (it skips what is already done).
+
+## Architecture
+
+```
+Browser (Next.js app: chat + case panel, partner page)
+   │  sealed case token + one action per request
+Next.js route handlers (Vercel functions)
+   ├─ Agent orchestrator: Gemini with tool calling; one step's tools at a time; approval gates
+   ├─ lib/calc       pure, tested money math (HEI, settlement, loans, watch paths, sale split)
+   ├─ lib/params     parameter registry, freshness gate, refresh script
+   ├─ lib/recommend  paths, rules, term sheet, passports, receipt
+   └─ lib/chain      Solana devnet with @solana/kit + Token-2022 (receipt, mints, sale, settlement)
+```
+
+| Folder | What is there |
+|---|---|
+| `app/`, `components/` | Pages and UI (agent page, partner page), API routes |
+| `lib/agent/` | Orchestrator, tools, prompts, Gemini client, services from the environment |
+| `lib/calc/` | Money math and its tests |
+| `lib/recommend/` | Comparison, rules, documents, demo personas |
+| `lib/chain/` | Solana: mints, receipt, KYC, sale, settlement, test dollar, wallets |
+| `lib/web/` | Sealed case token, the view sent to the browser, request handlers |
+| `data/` | `params.json` (registry), demo homes, watches, personas |
+| `scripts/` | Terminal chat, devnet scripts, registry tools |
 
 ## Run locally
 
-Requires Node.js 22.12 or later (the test runner, Vitest 5, needs it).
+Requires Node.js 22.12 or later.
 
 ```bash
 npm install
-cp .env.example .env.local   # set GEMINI_API_KEY and CASE_SECRET (openssl rand -base64 48)
-npm run chain:wallets        # devnet demo wallets; the issuer needs devnet SOL (https://faucet.solana.com)
-npm run dev                  # then open http://localhost:3000
+cp .env.example .env.local   # set GEMINI_API_KEY and CASE_SECRET (e.g. openssl rand -base64 48)
+npm run chain:wallets        # creates the devnet demo wallets in .wallets/devnet (git-ignored)
+                             # fund the printed issuer address at https://faucet.solana.com (devnet)
+npm run dev                  # http://localhost:3000
 ```
 
-In the browser, load persona B, then use the suggested messages: compare, prepare the documents,
-record the receipt and issue the HEI share tokens (each on-chain step asks for your approval).
-Then open "Partner & investors" to run the closing, the primary sale and a settlement on devnet.
+| Command | What it does |
+|---|---|
+| `npm run dev` | The web app |
+| `npm test` | Unit tests (Vitest), including the worked examples above |
+| `npm run agent:chat` | The agent in the terminal; `/photo <path>` adds a watch photo |
+| `npm run chain:demo` | Receipt + HEI shares + KYC, and receipt + watch token, on devnet |
+| `npm run chain:hei` | The whole HEI on devnet: issuance, closing, sale, settlement; `-- --years 10 --growth 0.03` for maturity |
+| `npm run params:check` | How fresh each registry value is today |
+| `npm run params:refresh` | Refresh market values from FRED (needs `FRED_API_KEY`) |
+| `npm run lint`, `npm run build` | ESLint; production build with the type check |
 
-## Try the agent (terminal)
+Settings (see `.env.example`): `GEMINI_API_KEY` (required), `CASE_SECRET` (required for the web
+app), `RENTCAST_API_KEY` or `PROPERTY_DATA_SOURCE=demo`, `PLAID_CLIENT_ID` + `PLAID_SECRET`
+(sandbox), `SOLANA_RPC_URL`, `REGISTRY_FROZEN_ON` (deployment for the judging period), and on a
+host without the wallet files `DEVNET_WALLET_<NAME>` and `DEVNET_TEST_DOLLAR_MINT`.
 
-Needs `GEMINI_API_KEY` in `.env.local` (paid tier). Use made-up personas in demos. With `RENTCAST_API_KEY` the home lookup uses RentCast; without it, or with `PROPERTY_DATA_SOURCE=demo`, it uses the made-up homes in `data/demo/properties.json` (try "742 Demo Lane, Exampleville, CA 99999", title name "Jordan Sample").
+## Data sources and notices
 
-```bash
-npm run agent:chat
-```
+- HELOC and home equity loan averages: Curinos, as published by Yahoo Finance (entered by hand,
+  with dates).
+- HEI terms: calibrated from Hometap's and Point's published terms; the investor discount, the
+  return cap and the eligibility cap are this project's design values.
+- Watch paths: published dealer, marketplace and lender terms (sources in `data/params.json`).
+- Home records and values: RentCast API when a key is set; otherwise made-up demo records.
+- This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of
+  St. Louis. Mortgage rate averages: Source: Freddie Mac Primary Mortgage Market Survey. The SOFR is
+  subject to the Terms of Use posted at newyorkfed.org; see [THIRD_PARTY.md](THIRD_PARTY.md) for the
+  full notices.
 
-To add a watch photo during the chat, type `/photo path/to/photo.jpg`. Try the made-up warranty card:
-`/photo data/demo/watch-photos/demo-warranty-card.png`. The demo price table in
-`data/demo/watch-prices.json` knows the made-up references `DEMO-300` and `DEMO-38G`.
-
-## Checks
-
-```bash
-npm test        # unit tests (Vitest)
-npm run params:check     # how fresh each value in data/params.json is today
-npm run lint    # ESLint
-npm run build   # production build, includes the TypeScript type check
-```
-
-## Data sources
-
-This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
-Mortgage rate averages: source Freddie Mac Primary Mortgage Market Survey. SOFR: Federal Reserve Bank
-of New York; see [THIRD_PARTY.md](THIRD_PARTY.md) for the full notices and terms of use.
-
-## Third-party code
-
-See [THIRD_PARTY.md](THIRD_PARTY.md).
+Third-party code, fonts and services are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Third-party code, fonts and data sources are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+MIT. See [LICENSE](LICENSE).
