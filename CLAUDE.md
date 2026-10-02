@@ -219,7 +219,8 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 ### 8.7 Primary sale and settlement on-chain (M8; code in `/lib/calc/sale.ts`)
 - Dollars move in whole micro-dollars (6 decimals). Token price = `p` rounded to the micro-dollar; a purchase costs tokens × price.
 - Settlement payout `P` (§8.2) rounded to the micro-dollar; a holder of `k` tokens gets `floor(P * k / N)`; the homeowner pays the sum (less than `P` by under one micro-dollar per holder). `N` is the supply issued, so a settlement that stopped half-way finishes at the same price per token.
-- Holders = the share accounts the issuer opened (treasury + KYC); the settlement refuses to pay anyone unless they hold the whole on-chain supply.
+- Holders = the share accounts the issuer opened (treasury + KYC); the settlement refuses to pay anyone unless they hold the whole on-chain supply, and refuses once the supply is 0 (already settled).
+- Run again safely (audit, 2026-10-02): mint addresses are derived from the issuer's signature over the receipt hashes (`issuerDerivedSigner`), so issuance resumes instead of making a second token; the closing payment creates a once-only marker account (`onceMarker`, system "create with seed" from the issuer); simulated money (partner, investors, homeowner) is minted inside the transaction that spends it; what holders received is read from the settlement transactions' token balances.
 
 | Check | Expected |
 |---|---|

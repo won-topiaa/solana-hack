@@ -69,10 +69,22 @@ function personaOf(caseFile: CaseFile): CaseView["persona"] {
   return DEMO_PERSONAS.find((persona) => persona.id === id) ?? null;
 }
 
+/** Dollar amounts ("$150,000", "$1.2 million") and percentages ("4.6%", "20 percent"). */
+const MONEY = /\$\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|K|thousand|million|M|billion|B)\b)?/g;
+const PERCENT = /\d+(?:\.\d+)?\s?(?:%|percent\b)/g;
+
+/**
+ * The web agent is told never to write figures (the panel shows the code-made ones). If
+ * it writes one anyway, it is replaced here, so no model-made number reaches the page.
+ */
+export function withoutFigures(text: string): string {
+  return text.replace(MONEY, "[amount: see the panel]").replace(PERCENT, "[rate: see the panel]");
+}
+
 function chatOf(caseFile: CaseFile): CaseView["chat"] {
   return caseFile.messages.flatMap((message): CaseView["chat"] => {
     if (message.role === "user") return [{ role: "user", text: message.text }];
-    if (message.role === "model" && message.text.trim()) return [{ role: "agent", text: message.text }];
+    if (message.role === "model" && message.text.trim()) return [{ role: "agent", text: withoutFigures(message.text) }];
     return [];
   });
 }
@@ -226,10 +238,10 @@ function heiOf(caseFile: CaseFile): CaseView["hei"] {
     sale: sale
       ? {
           lines: [
-            `Closing: the partner paid the homeowner ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (simulated partner, test dollars).`,
+            `Closing: the partner paid the homeowner ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (simulated partner; its test dollars are minted in the same transaction).`,
             ...sale.kyc.map((item) => `${item.name}: KYC approved (simulated); share account opened.`),
             `A buyer without KYC was refused on-chain ("${sale.rejected.reason}"); no money moved.`,
-            ...sale.purchases.map((purchase) => `${purchase.name} bought ${BigInt(purchase.tokens).toLocaleString("en-US")} shares for ${formatMicroUsd(BigInt(purchase.costMicroUsd))}.`),
+            ...sale.purchases.map((purchase) => `${purchase.name} bought ${BigInt(purchase.tokens).toLocaleString("en-US")} shares for ${formatMicroUsd(BigInt(purchase.costMicroUsd))} (simulated investor; test dollars minted in the purchase).`),
             `Raised ${formatMicroUsd(BigInt(sale.raisedMicroUsd))}.`,
           ],
           links: [
@@ -245,7 +257,7 @@ function heiOf(caseFile: CaseFile): CaseView["hei"] {
           lines: [
             `${settled.trigger === "maturity" ? "Maturity" : "Buyback"} after ${settled.years} years; home value ${formatUsd(settled.homeValueUsd)} (simulated appraisal).`,
             `Payout ${formatMicroUsd(BigInt(settled.payoutMicroUsd))}${settled.capApplied ? ` (the ${formatPercent(sheet.investorReturnCapPerYear * 100)} a year cap applies; uncapped ${formatUsd(settled.uncappedPayoutUsd)})` : ""}; homeowner's cost ${formatPercent(settled.ownerAnnualCost * 100)} a year.`,
-            ...(BigInt(settled.topUpMicroUsd) > BigInt(0) ? [`Simulated: ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} added to the homeowner's wallet to pay.`] : []),
+            ...(BigInt(settled.topUpMicroUsd) > BigInt(0) ? [`Simulated: the homeowner's ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} for the payout, minted as test dollars in the settlement transactions.`] : []),
             ...settled.payouts.map(
               (payout, index) =>
                 `${caseFile.handoff?.onchain?.heiSale?.purchases[index]?.name ?? "Holder"}: ${BigInt(payout.tokens).toLocaleString("en-US")} shares burned, paid ${formatMicroUsd(BigInt(payout.receivedMicroUsd))}.`,

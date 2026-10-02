@@ -24,6 +24,8 @@ export function freshnessOf(entry: ParamEntry, today: string): Freshness {
     return { stale: true, basis, ageDays: null, reason: "never confirmed at its source" };
   }
   const ageDays = daysBetween(date, today);
+  // A date after the check date is a typo or a freeze date set too early: not fresh.
+  if (ageDays < 0) return { stale: true, basis, ageDays, reason: `dated ${date}, after the check date ${today}` };
   const stale = ageDays > entry.valid_days;
   const reason = `${ageDays} days old (${basis} ${date}), valid for ${entry.valid_days}`;
   return { stale, basis, ageDays, reason };

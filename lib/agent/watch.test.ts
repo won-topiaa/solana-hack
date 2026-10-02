@@ -4,7 +4,7 @@ import { createDemoPropertySource } from "../integrations/rentcast";
 import type { WatchReading, WatchVision } from "../integrations/vision";
 import type { LlmReply } from "./llm";
 import { createCaseFile, resolveApproval, sendUserMessage } from "./orchestrator";
-import { addPhoto } from "./photos";
+import { addPhoto, looksLikeImage } from "./photos";
 import { createScriptedLlm } from "./scripted";
 import { createAgentTools } from "./tools";
 import type { CaseFile } from "./types";
@@ -179,6 +179,24 @@ describe("addPhoto", () => {
     const base = createCaseFile("case-photo", now());
     expect(() => addPhoto(base, { mimeType: "image/gif", bytes: TINY_PNG })).toThrow(/Unsupported photo type/);
     expect(() => addPhoto(base, { mimeType: "image/png", bytes: new Uint8Array() })).toThrow(/between/);
+  });
+
+  it("rejects a file whose bytes are not the image type it claims", () => {
+    const base = createCaseFile("case-photo", now());
+    const text = new TextEncoder().encode("not a photo at all");
+    expect(() => addPhoto(base, { mimeType: "image/jpeg", bytes: text })).toThrow(/not a image\/jpeg image/);
+    expect(() => addPhoto(base, { mimeType: "image/jpeg", bytes: TINY_PNG })).toThrow(/not a image\/jpeg image/);
+  });
+
+  it("knows the signatures of each accepted type", () => {
+    const riff = new TextEncoder().encode("RIFF\0\0\0\0WEBPVP8 ");
+    const heic = new Uint8Array([0, 0, 0, 24, ...new TextEncoder().encode("ftypheic")]);
+    expect(looksLikeImage("image/png", TINY_PNG)).toBe(true);
+    expect(looksLikeImage("image/jpeg", new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe(true);
+    expect(looksLikeImage("image/webp", riff)).toBe(true);
+    expect(looksLikeImage("image/heic", heic)).toBe(true);
+    expect(looksLikeImage("image/heif", heic)).toBe(true);
+    expect(looksLikeImage("image/webp", TINY_PNG)).toBe(false);
   });
 
   it("stores the photo with its SHA-256 so it can be referenced by hash later", () => {

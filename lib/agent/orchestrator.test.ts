@@ -115,6 +115,19 @@ describe("approval gates", () => {
     expect(done.caseFile.events.map((event) => event.type)).toEqual(["approval_requested", "approval_granted"]);
   });
 
+  it("keeps the approved step's result when the model fails afterwards", async () => {
+    const ran: unknown[] = [];
+    const llm = createScriptedLlm([callTool("record_receipt", {})]); // no reply left: the next model call throws
+    const deps = { llm, tools: [gatedTool(ran)], now };
+    const asked = await sendUserMessage(createCaseFile("case-8", now()), "Record it", deps);
+    const done = await resolveApproval(asked.caseFile, asked.awaitingApproval!.id, true, deps);
+    expect(ran).toHaveLength(1);
+    expect(done.caseFile.pendingApproval).toBeNull(); // approving the same request again is impossible
+    expect(done.reply).toContain("ran and its result is saved");
+    expect(done.caseFile.messages.at(-2)).toMatchObject({ role: "tool", results: [{ output: { txId: "test-tx" } }] });
+    expect(done.caseFile.events.map((event) => event.type)).toContain("model_failed_after_approval");
+  });
+
   it("does not run the tool when the user says no, and tells the model", async () => {
     const ran: unknown[] = [];
     const llm = createScriptedLlm([callTool("record_receipt", {}), say("Okay, I did not record it.")]);

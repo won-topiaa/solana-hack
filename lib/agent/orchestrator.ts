@@ -12,6 +12,7 @@ import type { AgentMessage, CaseFile, PendingApproval, ToolCall, ToolResult } fr
 export const MAX_MODEL_CALLS_PER_TURN = 6;
 
 const EMPTY_REPLY = "Sorry, I could not produce an answer. Please try again.";
+const AFTER_STEP_REPLY = "The approved step ran and its result is saved in the case, but I could not write an answer. Ask me to continue.";
 
 export type AgentDeps = { llm: LlmClient; tools: AgentTool[]; now?: () => Date; channel?: Channel };
 
@@ -80,7 +81,16 @@ export async function resolveApproval(
   // Answer every call of that model reply at once, in the order it asked for them.
   const results = [...pending.heldResults];
   results.splice(pending.insertAt, 0, resultFor(pending.call, output));
-  return runModelLoop(withMessage(file, { role: "tool", results }), deps);
+  const answered = withMessage(file, { role: "tool", results });
+  if (!approved) return runModelLoop(answered, deps);
+  try {
+    return await runModelLoop(answered, deps);
+  } catch {
+    // The approved step has already run (perhaps on-chain). Keep its result even when the
+    // model fails now; otherwise the case would still ask for approval and run it twice.
+    const failed = withEvent(answered, deps, "model_failed_after_approval", pending.call.name);
+    return { caseFile: withMessage(failed, { role: "model", text: AFTER_STEP_REPLY, toolCalls: [] }), reply: AFTER_STEP_REPLY, awaitingApproval: null };
+  }
 }
 
 async function runModelLoop(start: CaseFile, deps: AgentDeps): Promise<TurnResult> {
@@ -138,7 +148,7 @@ async function runToolCalls(
       pending = {
         id: `approval-${call.id}`,
         call,
-        summary: tool.describeForApproval?.(call.args) ?? `Run ${call.name}`,
+        summary: tool.describeForApproval?.(call.args, file) ?? `Run ${call.name}`,
         heldResults: [],
         insertAt: results.length,
         requestedAt: currentTime(deps).toISOString(),

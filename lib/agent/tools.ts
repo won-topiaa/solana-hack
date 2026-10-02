@@ -4,7 +4,7 @@
 // Numbers go back to the model as finished `display` text, formatted by code.
 
 import { matchOwner } from "../assets/ownerMatch";
-import { hashSerial, newSalt } from "../assets/serial";
+import { hashSerial, newSalt, redactSerial } from "../assets/serial";
 import type { OwnerMatch, PiiItem, RealEstateAsset, WatchAsset } from "../assets/types";
 import { findWatchPrice } from "../assets/watchPrices";
 import type { WatchCategory } from "../calc/watch";
@@ -17,6 +17,7 @@ import { checkGoal } from "./goal";
 import type { ToolDeclaration } from "./llm";
 import type { CaseFile, Stage } from "./types";
 import type { Registry } from "../params/types";
+import { checkParamsFresh } from "../params/staleness";
 import { hashOf } from "../recommend/canonical";
 import { describeRecommendation } from "../recommend/display";
 import { buildPassport, buildReceipt, type AssetPassport } from "../recommend/passport";
@@ -35,7 +36,7 @@ export type AgentTool = {
   stages: Stage[]; // the steps in which the model is offered this tool
   requiresApproval: boolean;
   /** The sentence the user approves or rejects. */
-  describeForApproval?: (args: Record<string, unknown>) => string;
+  describeForApproval?: (args: Record<string, unknown>, caseFile: CaseFile) => string;
   run: (args: Record<string, unknown>, context: ToolContext) => ToolOutcome | Promise<ToolOutcome>;
 };
 
@@ -366,7 +367,7 @@ export function createReadWatchPhotos(vision: WatchVision): AgentTool {
         photoIds: ids,
       };
       // The model's notes could quote the serial, so it is blanked out before they go back.
-      const notes = reading.notes && reading.serial ? reading.notes.split(reading.serial).join("[serial]") : reading.notes;
+      const notes = reading.notes && reading.serial ? redactSerial(reading.notes, reading.serial) : reading.notes;
       return {
         output: { saved: true, assetId: watch.id, display: describeWatch(watch), needs: stillNeeded(watch), notes },
         caseFile: { ...file, assets: [...file.assets, watch] },
@@ -563,7 +564,7 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
     },
     stages: ["compare", "prepare"],
     requiresApproval: false,
-    run(args, { caseFile, now }) {
+    run(args, { caseFile, now, today }) {
       const recommendation = caseFile.recommendation;
       if (!recommendation) return { output: { prepared: false, problem: "Compare the paths first." }, caseFile };
       if (inputsChanged(caseFile)) {
@@ -577,6 +578,14 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
       if (!chosen) return { output: { prepared: false, problem: `No path with id ${optionId} in the comparison.` }, caseFile };
       if (!isSelectable(chosen)) {
         return { output: { prepared: false, problem: `${chosen.label} cannot be prepared: ${chosen.whyNotSuitable ?? "it is shown for information only"}` }, caseFile };
+      }
+      // The documents must rest on the same, still fresh values as the comparison (M2 gate).
+      if (recommendation.registryVersion !== registry.registry_version) {
+        return { output: { prepared: false, problem: "The parameter registry changed since the comparison. Call compare_paths again." }, caseFile };
+      }
+      const freshness = checkParamsFresh(registry, chosen.usedParamKeys, registry.frozenOn ?? today);
+      if (!freshness.ok) {
+        return { output: { prepared: false, problem: `These values went out of date since the comparison: ${freshness.stale.map((item) => item.key).join(", ")}. Call compare_paths again.` }, caseFile };
       }
       // A vault takes a watch only after a passing stolen-watch check, so the passport must already include it.
       const tokenizesWatch = chosen.id.startsWith("w-vault-token-");
@@ -643,8 +652,28 @@ function inputsChanged(caseFile: CaseFile): boolean {
 
 /**
  * The goal and assets can still change after the documents are prepared; then the
- * documents no longer describe the case and must not go on-chain.
+ * documents no longer describe the case and must not go on-chain. Besides the values the
+ * comparison used, each passport is rebuilt from the case: a new serial number, theft
+ * check or photo changes its hash.
  */
+function documentsChanged(caseFile: CaseFile): boolean {
+  const handoff = caseFile.handoff;
+  if (!handoff || inputsChanged(caseFile)) return true;
+  return handoff.passports.some((passport) => {
+    try {
+      return hashOf(buildPassport(caseFile, passport.assetId).passport) !== hashOf(passport);
+    } catch {
+      return true; // the asset or its address is gone
+    }
+  });
+}
+
+/** The label of the path the documents were prepared for, for the approval sentence. */
+function selectedPathLabel(caseFile: CaseFile): string {
+  const selected = caseFile.handoff?.receipt.selectedOptionId;
+  return caseFile.recommendation?.options.find((option) => option.id === selected)?.label ?? selected ?? "the prepared path";
+}
+
 function staleDocuments(caseFile: CaseFile): ToolOutcome {
   return { output: { done: false, problem: "The goal or assets changed after the documents were prepared. Call compare_paths and prepare_documents again." }, caseFile };
 }
@@ -665,11 +694,12 @@ export function createRecordReceipt(chain: ChainService): AgentTool {
     },
     stages: ["prepare", "execute"],
     requiresApproval: true,
-    describeForApproval: () => "Write the recommendation receipt (hashes only) to Solana devnet, signed by your wallet",
+    describeForApproval: (_args, caseFile) =>
+      `Write the receipt for "${selectedPathLabel(caseFile)}" (hashes only) to Solana devnet, signed by your wallet. After this the chosen path is final for this case`,
     async run(_args, { caseFile }) {
       const handoff = caseFile.handoff;
       if (!handoff) return { output: { done: false, problem: "Prepare the documents first." }, caseFile };
-      if (inputsChanged(caseFile)) return staleDocuments(caseFile);
+      if (documentsChanged(caseFile)) return staleDocuments(caseFile);
       if (handoff.onchain?.receipt) {
         return { output: { done: true, display: `The receipt is already on Solana devnet: ${handoff.onchain.receipt.explorerUrls[0]}` }, caseFile };
       }
@@ -702,14 +732,18 @@ export function createIssueHeiShares(chain: ChainService): AgentTool {
     },
     stages: ["prepare", "execute"],
     requiresApproval: true,
-    describeForApproval: () => "Create the HEI share tokens on Solana devnet (accounts frozen until KYC; the partner is simulated)",
+    describeForApproval: (_args, caseFile) => {
+      const supply = caseFile.handoff?.termSheet?.tokenSupply;
+      const count = supply === undefined ? "the" : `${supply.toLocaleString("en-US")}`;
+      return `Create ${count} HEI share tokens on Solana devnet for the simulated partner's primary sale (accounts frozen until KYC)`;
+    },
     async run(_args, { caseFile }) {
       const handoff = caseFile.handoff;
       const sheet = handoff?.termSheet;
       if (!handoff || !sheet || handoff.receipt.selectedOptionId !== "re-hei") {
         return { output: { done: false, problem: "This is only for a prepared HEI path." }, caseFile };
       }
-      if (inputsChanged(caseFile)) return staleDocuments(caseFile);
+      if (documentsChanged(caseFile)) return staleDocuments(caseFile);
       if (!handoff.onchain?.receipt) return { output: { done: false, problem: "Record the receipt on-chain first (record_receipt_onchain)." }, caseFile };
       if (handoff.onchain.heiShares) return { output: { done: true, display: `The HEI share tokens already exist: ${handoff.onchain.heiShares.explorerUrls.at(-1)}` }, caseFile };
       const passport = handoff.passports.find((item) => item.assetId === sheet.assetId);
@@ -758,7 +792,7 @@ export function createIssueWatchToken(chain: ChainService): AgentTool {
       if (!handoff || !selected.startsWith("w-vault-token-")) {
         return { output: { done: false, problem: "This is only for a prepared watch tokenization path." }, caseFile };
       }
-      if (inputsChanged(caseFile)) return staleDocuments(caseFile);
+      if (documentsChanged(caseFile)) return staleDocuments(caseFile);
       if (!handoff.onchain?.receipt) return { output: { done: false, problem: "Record the receipt on-chain first (record_receipt_onchain)." }, caseFile };
       if (handoff.onchain.watchToken) return { output: { done: true, display: `The watch token already exists: ${handoff.onchain.watchToken.explorerUrls.at(-1)}` }, caseFile };
       const assetId = selected.replace("w-vault-token-", "");

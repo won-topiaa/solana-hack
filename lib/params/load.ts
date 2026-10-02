@@ -45,6 +45,10 @@ function checkEntry(key: string, raw: unknown): ParamEntry {
   if (validDays !== null && !(Number.isInteger(validDays) && (validDays as number) >= 0)) {
     fail(`${path}.valid_days`, "must be null or a whole number of days");
   }
+  // Market data and partner terms must expire; only design and reference values may not.
+  if ((entry.kind === "market" || entry.kind === "product") && validDays === null) {
+    fail(`${path}.valid_days`, `must be a number of days for a ${String(entry.kind)} value`);
+  }
   return entry as ParamEntry;
 }
 
@@ -70,6 +74,12 @@ export function formatRegistry(registry: Registry): string {
 export function freezeRegistry(registry: Registry, frozenOn: string, today: string): Registry {
   if (!isIsoDate(frozenOn)) throw new Error(`REGISTRY_FROZEN_ON must be a YYYY-MM-DD date, got "${frozenOn}"`);
   if (frozenOn > today) throw new Error(`REGISTRY_FROZEN_ON (${frozenOn}) is after today (${today})`);
+  // Freezing before the newest value was observed or checked would claim data the page did not have.
+  const dates = Object.values(registry.params)
+    .filter((entry) => entry.kind === "market" || entry.kind === "product")
+    .map((entry) => (entry.kind === "market" ? entry.as_of : (entry.checked_at ?? entry.as_of)));
+  const newest = dates.reduce((a, b) => (b > a ? b : a), "");
+  if (frozenOn < newest) throw new Error(`REGISTRY_FROZEN_ON (${frozenOn}) is before the newest registry value (${newest})`);
   return { ...registry, frozenOn };
 }
 

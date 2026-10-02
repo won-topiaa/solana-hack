@@ -15,6 +15,7 @@ import {
   explorerAddressUrl,
   explorerTxUrl,
   getSolBalance,
+  MIN_ISSUER_SOL,
   openFrozenAccount,
   readTokenAccount,
 } from "../lib/chain/solana";
@@ -25,7 +26,6 @@ import { getRegistry } from "../lib/params/load";
 import { personaCase } from "../lib/recommend/personas";
 import { createStepRunner } from "./agentSteps";
 
-const MIN_ISSUER_SOL = 0.05;
 
 async function main() {
   const rpc = createDevnetRpc(process.env.SOLANA_RPC_URL || undefined);

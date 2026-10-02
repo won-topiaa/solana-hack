@@ -10,6 +10,16 @@ export function normalizeSerial(serial: string): string {
   return serial.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+/**
+ * Blanks out the serial wherever it appears in a text, written in any case and with any
+ * spaces or dashes between its characters ("DW7731842", "dw 773-1842").
+ */
+export function redactSerial(text: string, serial: string, mask = "[serial]"): string {
+  const characters = normalizeSerial(serial).split(""); // letters and digits only, safe in a pattern
+  if (characters.length === 0) return text;
+  return text.replace(new RegExp(characters.join("[^A-Za-z0-9]*"), "gi"), mask);
+}
+
 export function newSalt(): string {
   return randomBytes(16).toString("hex");
 }

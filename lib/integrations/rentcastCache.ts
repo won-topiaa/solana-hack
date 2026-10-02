@@ -23,8 +23,12 @@ export function createFileStore(dir: string = DEFAULT_CACHE_DIR): CacheStore {
       }
     },
     set(key, lookup) {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(fileFor(dir, key), JSON.stringify(lookup), { mode: 0o600 });
+      try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(fileFor(dir, key), JSON.stringify(lookup), { mode: 0o600 });
+      } catch {
+        // A read-only disk (serverless hosting): the lookup still answers, it is just not kept.
+      }
     },
   };
 }

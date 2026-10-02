@@ -44,6 +44,11 @@ export function watchTokenInfo(input: WatchIssueInput): TokenInfo {
   };
 }
 
+/** Names a token by the receipt it carries out: one receipt and passport, one token. */
+export function issuanceLabel(input: { passportHash: string; recommendationHash: string }): string {
+  return `rec=${input.recommendationHash} passport=${input.passportHash}`;
+}
+
 /** Enough SOL for the user wallet to pay for a few memo transactions. */
 const USER_FEE_SOL = 0.01;
 
@@ -68,13 +73,13 @@ export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSign
 
     async issueHeiShares(input: HeiIssueInput) {
       await requireFunds(rpc, wallets.issuer.address);
-      const created = await createHeiShareMint(rpc, wallets.issuer, input.tokenSupply, heiTokenInfo(input));
+      const created = await createHeiShareMint(rpc, wallets.issuer, input.tokenSupply, heiTokenInfo(input), issuanceLabel(input));
       return { ...record(created.signatures, created.mint), treasury: created.treasury };
     },
 
     async issueWatchToken(input: WatchIssueInput) {
       await requireFunds(rpc, wallets.issuer.address);
-      const created = await createWatchToken(rpc, wallets.issuer, wallets.user.address, watchTokenInfo(input));
+      const created = await createWatchToken(rpc, wallets.issuer, wallets.user.address, watchTokenInfo(input), issuanceLabel(input));
       return { ...record(created.signatures, created.mint), owner: wallets.user.address };
     },
   };

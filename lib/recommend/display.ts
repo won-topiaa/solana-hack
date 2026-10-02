@@ -16,7 +16,7 @@ export function costText(option: PathOption, years: number): string {
       .map(
         (scenario) =>
           `if prices ${scenario.growth === 0 ? "stay flat" : `rise ${pct(scenario.growth)} a year`}, you pay ` +
-          `${formatUsd(scenario.payoutUsd)} at settlement in ${years} years (${pct(scenario.effectiveAnnualCost)} a year)`,
+          `${formatUsd(scenario.payoutUsd)} at settlement in ${scenario.years} years (${pct(scenario.effectiveAnnualCost)} a year)`,
       )
       .join("; ");
   }

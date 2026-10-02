@@ -3,9 +3,12 @@
 // polling over HTTP, because the docs we checked give no public devnet WebSocket URL.
 // Docs: https://solana.com/docs/references/clusters , https://github.com/anza-xyz/kit
 
+import { createHash } from "node:crypto";
 import {
   appendTransactionMessageInstructions,
+  createAddressWithSeed,
   createDefaultRpcTransport,
+  createKeyPairSignerFromPrivateKeyBytes,
   createSolanaRpcFromTransport,
   createTransactionMessage,
   devnet,
@@ -13,7 +16,6 @@ import {
   SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
   SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED,
   type RpcTransport,
-  generateKeyPairSigner,
   getBase64EncodedWireTransaction,
   getSignatureFromTransaction,
   lamports,
@@ -21,6 +23,7 @@ import {
   pipe,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
+  signBytes,
   signTransactionMessageWithSigners,
   some,
   type Address,
@@ -31,7 +34,7 @@ import {
   type TransactionSigner,
 } from "@solana/kit";
 import { getAddMemoInstruction } from "@solana-program/memo";
-import { getCreateAccountInstruction, getTransferSolInstruction } from "@solana-program/system";
+import { getCreateAccountInstruction, getCreateAccountWithSeedInstruction, getTransferSolInstruction, SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import {
   AccountState,
   AuthorityType,
@@ -56,12 +59,13 @@ export const DEVNET_RPC_URL = "https://api.devnet.solana.com";
 export const explorerTxUrl = (signature: string) => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
 export const explorerAddressUrl = (address: string) => `https://explorer.solana.com/address/${address}?cluster=devnet`;
 
-/** An RPC answer worth retrying: rate limited (HTTP 429), a busy node (5xx), or no connection. */
+/** An RPC answer worth retrying: rate limited (HTTP 429), a busy node (5xx), no connection, or no answer in time. */
 export function isRetriable(error: unknown): boolean {
   if (isSolanaError(error, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR)) {
     const status = error.context.statusCode;
     return status === 429 || status >= 500;
   }
+  if (error instanceof Error && error.name === "TimeoutError") return true; // our per-request time limit
   return error instanceof TypeError; // fetch's network failure
 }
 
@@ -73,16 +77,20 @@ export function isRateLimited(error: unknown): boolean {
  * Retries a call that failed for a passing reason, waiting longer each time (0.5 s, 1 s,
  * 2 s, ...). Shared hosting shares its outgoing IP address, and the public devnet RPC
  * limits requests per IP, so a busy minute should slow the demo down, not break it.
+ * Each request also gets a time limit, so a stalled connection cannot use up the
+ * hosting's whole function time. Every call we make is safe to repeat: reads, and
+ * sends of an already signed transaction.
  */
 export function withRetries<T extends RpcTransport>(
   transport: T,
-  options: { attempts?: number; firstDelayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+  options: { attempts?: number; firstDelayMs?: number; timeoutMs?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): T {
-  const { attempts = 6, firstDelayMs = 500, sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) } = options;
+  const { attempts = 6, firstDelayMs = 500, timeoutMs = 20_000, sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) } = options;
   const retrying = async (config: Parameters<RpcTransport>[0]) => {
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await transport(config);
+        const limit = AbortSignal.timeout(timeoutMs);
+        return await transport({ ...config, signal: config.signal ? AbortSignal.any([config.signal, limit]) : limit });
       } catch (error) {
         if (attempt >= attempts || !isRetriable(error)) throw error;
         await sleep(firstDelayMs * 2 ** (attempt - 1));
@@ -106,13 +114,23 @@ export function describeChainError(error: unknown): string {
 /** Every 2 s: the public RPC limits requests per IP, so confirmation checks stay light. */
 const POLL_MS = 2000;
 
-async function waitForConfirmation(rpc: DevnetRpc, signature: Signature, timeoutMs = 90_000): Promise<void> {
+/**
+ * Waits until the transaction is confirmed. With `lastValidBlockHeight` it also stops as
+ * soon as the transaction's blockhash has expired: from then on it can never land, so a
+ * retry cannot do the step twice.
+ */
+async function waitForConfirmation(rpc: DevnetRpc, signature: Signature, lastValidBlockHeight?: bigint, timeoutMs = 90_000): Promise<void> {
   const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
+  for (let poll = 1; Date.now() - started < timeoutMs; poll += 1) {
     const { value } = await rpc.getSignatureStatuses([signature]).send();
     const status = value[0];
     if (status?.err) throw new Error(`Transaction ${signature} failed: ${JSON.stringify(status.err)}`);
     if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") return;
+    // Every third poll, so the extra request stays light on the public RPC.
+    if (!status && lastValidBlockHeight !== undefined && poll % 3 === 0) {
+      const height = await rpc.getBlockHeight({ commitment: "confirmed" }).send();
+      if (height > lastValidBlockHeight) throw new Error(`Transaction ${signature} expired before it landed; nothing was done, so it is safe to try again`);
+    }
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
   throw new Error(`Transaction ${signature} was not confirmed within ${timeoutMs / 1000} seconds`);
@@ -144,7 +162,7 @@ export async function sendInstructions(rpc: DevnetRpc, feePayer: TransactionSign
     // A retried send of the same signed transaction can find it already processed: that is success.
     if (!alreadyProcessed(error)) throw error;
   }
-  await waitForConfirmation(rpc, signature);
+  await waitForConfirmation(rpc, signature, blockhash.lastValidBlockHeight);
   return signature;
 }
 
@@ -188,6 +206,65 @@ export async function sendDevnetSol(rpc: DevnetRpc, from: KeyPairSigner, to: Add
   return sendInstructions(rpc, from, [
     getTransferSolInstruction({ source: from, destination: to, amount: lamports(BigInt(Math.round(sol * 1e9))) }),
   ]);
+}
+
+/**
+ * 32 secret bytes that the issuer can make again at any time: the SHA-256 of its
+ * signature over `label` (Ed25519 signatures are deterministic). Nobody else can compute
+ * them, so the addresses made from them cannot be guessed and taken first.
+ */
+export async function issuerSecret(issuer: KeyPairSigner, label: string): Promise<Uint8Array> {
+  const signature = await signBytes(issuer.keyPair.privateKey, new TextEncoder().encode(label));
+  return new Uint8Array(createHash("sha256").update(signature).digest());
+}
+
+/**
+ * The same keypair for the same label, every time. A token's mint address made this way
+ * means that running an issuance again (an interrupted request, a replayed approval)
+ * finds the token it already made instead of creating a second one.
+ */
+export async function issuerDerivedSigner(issuer: KeyPairSigner, label: string): Promise<KeyPairSigner> {
+  return createKeyPairSignerFromPrivateKeyBytes(await issuerSecret(issuer, label));
+}
+
+/**
+ * A "done once" marker: an empty account at an address only the issuer can create
+ * (system program, "with seed" from the issuer). Put its creation into a transaction and
+ * that transaction can succeed only once; a second try fails because the account exists.
+ * The seed comes from the issuer's secret, so nobody can fund the address first to block it.
+ */
+export async function onceMarker(issuer: KeyPairSigner, label: string): Promise<{ address: Address; seed: string }> {
+  const seed = Buffer.from(await issuerSecret(issuer, label)).toString("hex").slice(0, 32); // seeds are at most 32 bytes
+  return { address: await createAddressWithSeed({ baseAddress: issuer.address, programAddress: SYSTEM_PROGRAM_ADDRESS, seed }), seed };
+}
+
+/** Rent-exempt minimum for an account with no data (devnet rent: getMinimumBalanceForRentExemption(0)). */
+export async function onceMarkerInstruction(rpc: DevnetRpc, issuer: KeyPairSigner, marker: { address: Address; seed: string }): Promise<Instruction> {
+  const rent = await rpc.getMinimumBalanceForRentExemption(BigInt(0)).send();
+  return getCreateAccountWithSeedInstruction({
+    payer: issuer,
+    newAccount: marker.address,
+    base: issuer.address,
+    seed: marker.seed,
+    amount: rent,
+    space: BigInt(0),
+    programAddress: SYSTEM_PROGRAM_ADDRESS,
+  });
+}
+
+/** The oldest successful transactions that touched an account (the one that created it first). */
+export async function oldestSignatures(rpc: DevnetRpc, account: Address, count: number): Promise<Signature[]> {
+  const entries = await rpc.getSignaturesForAddress(account, { commitment: "confirmed" }).send(); // newest first, up to 1,000
+  return [...entries]
+    .reverse()
+    .filter((entry) => entry.err === null)
+    .slice(0, count)
+    .map((entry) => entry.signature);
+}
+
+export async function accountExists(rpc: DevnetRpc, account: Address): Promise<boolean> {
+  const { value } = await rpc.getAccountInfo(account, { encoding: "base64" }).send();
+  return value !== null;
 }
 
 /** The receipt as a memo: hashes, versions and the chosen path only. No personal data. */
@@ -280,13 +357,56 @@ export async function createMint(rpc: DevnetRpc, issuer: KeyPairSigner, mint: Ke
   return { mint: mint.address, signature };
 }
 
-/**
- * A failure after the mint address exists. A confirmation timeout does not prove the
- * transaction failed, so name the mint: retrying blindly could issue a second token.
- */
-function failedAfterMint(mint: Address, error: unknown): Error {
+/** A failure during issuance. The mint address is fixed, so trying again finishes the same token. */
+function failedDuringIssuance(mint: Address, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
-  return new Error(`${message}. Token ${mint} may already exist (${explorerAddressUrl(mint)}); check it before trying again`);
+  return new Error(`${message}. Token ${mint} may be partly made (${explorerAddressUrl(mint)}); trying again finishes it and never makes a second one`);
+}
+
+export type MintState = { mintAuthority: Address | null; supply: bigint };
+
+/** A Token-2022 mint's mint authority (null once minting is closed) and supply. null when no account exists. */
+export async function readMintState(rpc: DevnetRpc, mint: Address): Promise<MintState | null> {
+  const { value } = await rpc.getAccountInfo(mint, { encoding: "jsonParsed" }).send();
+  if (!value) return null;
+  type Parsed = { parsed?: { type?: string; info?: { mintAuthority?: Address | null; supply?: string } } };
+  const parsed = (value.data as Parsed).parsed;
+  if (value.owner !== TOKEN_2022_PROGRAM_ADDRESS || parsed?.type !== "mint") throw new Error(`${mint} exists but is not a Token-2022 mint`);
+  return { mintAuthority: parsed.info?.mintAuthority ?? null, supply: BigInt(parsed.info?.supply ?? "0") };
+}
+
+/**
+ * Issues a token in two transactions: (1) create the mint with its locked metadata,
+ * (2) mint the supply and close minting. The mint address comes from `label`, so a
+ * second run looks at the chain first and only does what is missing.
+ * Returns the two transactions, oldest first (found in the mint's history when an
+ * earlier run sent them).
+ */
+async function issueOnce(
+  rpc: DevnetRpc,
+  issuer: KeyPairSigner,
+  label: string,
+  info: TokenInfo,
+  options: MintOptions,
+  supplyInstructions: (mint: Address) => Promise<Instruction[]>,
+): Promise<{ mint: Address; signatures: Signature[] }> {
+  const mint = await issuerDerivedSigner(issuer, label);
+  const sent: Signature[] = [];
+  try {
+    let state = await readMintState(rpc, mint.address);
+    if (!state) {
+      sent.push((await createMint(rpc, issuer, mint, info, options)).signature);
+      state = { mintAuthority: issuer.address, supply: BigInt(0) };
+    }
+    if (state.mintAuthority !== null) {
+      if (state.mintAuthority !== issuer.address) throw new Error(`Token ${mint.address} has another mint authority`);
+      sent.push(await sendInstructions(rpc, issuer, await supplyInstructions(mint.address)));
+    }
+    const earlier = sent.length < 2 ? await oldestSignatures(rpc, mint.address, 2 - sent.length) : [];
+    return { mint: mint.address, signatures: [...earlier, ...sent] };
+  } catch (error) {
+    throw failedDuringIssuance(mint.address, error);
+  }
 }
 
 export async function tokenAccount(owner: Address, mint: Address): Promise<Address> {
@@ -306,23 +426,20 @@ export const WATCH_TOKEN_MINT: MintOptions = { decimals: 0, frozenByDefault: fal
  * HEI shares: whole tokens (decimals 0), every new account frozen by default so
  * only allow-listed (KYC) wallets can hold them. The issuer's treasury is thawed
  * and receives the full supply for the primary sale; then minting is closed.
+ * `label` names the deal (its receipt hashes): the same label always means the same token.
  */
-export async function createHeiShareMint(rpc: DevnetRpc, issuer: KeyPairSigner, tokenSupply: number, info: TokenInfo) {
-  const mint = await generateKeyPairSigner();
-  try {
-    const created = await createMint(rpc, issuer, mint, info, HEI_SHARE_MINT);
-    const treasury = await tokenAccount(issuer.address, created.mint);
-    const minted = await sendInstructions(rpc, issuer, [
-      await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner: issuer.address, mint: created.mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
-      getThawAccountInstruction({ account: treasury, mint: created.mint, owner: issuer }),
-      getMintToInstruction({ mint: created.mint, token: treasury, mintAuthority: issuer, amount: BigInt(tokenSupply) }),
+export async function createHeiShareMint(rpc: DevnetRpc, issuer: KeyPairSigner, tokenSupply: number, info: TokenInfo, label: string) {
+  const issued = await issueOnce(rpc, issuer, `ownflow hei shares v1 ${label}`, info, HEI_SHARE_MINT, async (mint) => {
+    const treasury = await tokenAccount(issuer.address, mint);
+    return [
+      await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner: issuer.address, mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
+      getThawAccountInstruction({ account: treasury, mint, owner: issuer }),
+      getMintToInstruction({ mint, token: treasury, mintAuthority: issuer, amount: BigInt(tokenSupply) }),
       // The supply is the term sheet's N for good: no more shares can ever be minted.
-      getSetAuthorityInstruction({ owned: created.mint, owner: issuer, authorityType: AuthorityType.MintTokens, newAuthority: none() }),
-    ]);
-    return { mint: created.mint, treasury, signatures: [created.signature, minted] };
-  } catch (error) {
-    throw failedAfterMint(mint.address, error);
-  }
+      getSetAuthorityInstruction({ owned: mint, owner: issuer, authorityType: AuthorityType.MintTokens, newAuthority: none() }),
+    ];
+  });
+  return { ...issued, treasury: await tokenAccount(issuer.address, issued.mint) };
 }
 
 /**
@@ -349,21 +466,17 @@ export async function openFrozenAccount(rpc: DevnetRpc, issuer: KeyPairSigner, m
   return { account, signature };
 }
 
-/** The watch's 1-of-1 token: supply 1, no decimals, minting closed for good after the one token. */
-export async function createWatchToken(rpc: DevnetRpc, issuer: KeyPairSigner, owner: Address, info: TokenInfo) {
-  const mint = await generateKeyPairSigner();
-  try {
-    const created = await createMint(rpc, issuer, mint, info, WATCH_TOKEN_MINT);
-    const account = await tokenAccount(owner, created.mint);
-    const minted = await sendInstructions(rpc, issuer, [
-      await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner, mint: created.mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
-      getMintToInstruction({ mint: created.mint, token: account, mintAuthority: issuer, amount: BigInt(1) }),
-      getSetAuthorityInstruction({ owned: created.mint, owner: issuer, authorityType: AuthorityType.MintTokens, newAuthority: none() }),
-    ]);
-    return { mint: created.mint, account, signatures: [created.signature, minted] };
-  } catch (error) {
-    throw failedAfterMint(mint.address, error);
-  }
+/**
+ * The watch's 1-of-1 token: supply 1, no decimals, minting closed for good after the one
+ * token. `label` names the vaulted watch (its receipt hashes), so there is never a second token.
+ */
+export async function createWatchToken(rpc: DevnetRpc, issuer: KeyPairSigner, owner: Address, info: TokenInfo, label: string) {
+  const issued = await issueOnce(rpc, issuer, `ownflow watch token v1 ${label}`, info, WATCH_TOKEN_MINT, async (mint) => [
+    await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner, mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
+    getMintToInstruction({ mint, token: await tokenAccount(owner, mint), mintAuthority: issuer, amount: BigInt(1) }),
+    getSetAuthorityInstruction({ owned: mint, owner: issuer, authorityType: AuthorityType.MintTokens, newAuthority: none() }),
+  ]);
+  return { ...issued, account: await tokenAccount(owner, issued.mint) };
 }
 
 export type TokenAccountState = { owner: Address; state: string; amount: string };

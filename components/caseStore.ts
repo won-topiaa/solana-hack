@@ -9,7 +9,10 @@ export type CaseReplyJson = { token: string; view: CaseView };
 
 const KEY = "ownflow.case";
 const listeners = new Set<() => void>();
-let memory: string | null = null; // when sessionStorage is blocked (some private windows)
+// The current case. It is read from sessionStorage once per page load, then kept here, so
+// a failed save (storage blocked or full) can never bring back an older case.
+let memory: string | null = null;
+let loaded = false;
 
 export function subscribeCase(listener: () => void): () => void {
   listeners.add(listener);
@@ -17,11 +20,15 @@ export function subscribeCase(listener: () => void): () => void {
 }
 
 export function caseSnapshot(): string | null {
-  try {
-    return sessionStorage.getItem(KEY) ?? memory;
-  } catch {
-    return memory;
+  if (!loaded) {
+    loaded = true;
+    try {
+      memory = sessionStorage.getItem(KEY);
+    } catch {
+      // Blocked storage (some private windows): start with no case.
+    }
   }
+  return memory;
 }
 
 export function serverCaseSnapshot(): string | null {
@@ -30,11 +37,18 @@ export function serverCaseSnapshot(): string | null {
 
 export function storeCase(reply: CaseReplyJson | null): void {
   memory = reply ? JSON.stringify(reply) : null;
+  loaded = true;
   try {
     if (memory) sessionStorage.setItem(KEY, memory);
     else sessionStorage.removeItem(KEY);
   } catch {
-    // Blocked storage: the case lives in memory until the tab closes.
+    // Not saved (blocked or full): the case lives in memory until the tab closes, and the
+    // older saved case is removed so a reload cannot bring it back.
+    try {
+      sessionStorage.removeItem(KEY);
+    } catch {
+      // Storage is blocked altogether.
+    }
   }
   listeners.forEach((listener) => listener());
 }

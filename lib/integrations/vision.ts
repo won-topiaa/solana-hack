@@ -118,7 +118,14 @@ export function createGeminiVision(options: { apiKey: string; model: string }): 
         .filter((part) => part.text && !part.thought)
         .map((part) => part.text)
         .join("");
-      return parseWatchReading(JSON.parse(text));
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        // Not the parser's message: it quotes the start of the text, which may hold a serial number.
+        throw new Error("The photo reader's answer was not valid JSON. Try the photos again.");
+      }
+      return parseWatchReading(json);
     },
   };
 }

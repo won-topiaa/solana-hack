@@ -5,13 +5,13 @@
 // money for the settlement. Payments use test dollars with no value.
 // Amounts are kept as strings of micro-dollars, so the records stay plain JSON.
 
-import { address, type Address, type KeyPairSigner } from "@solana/kit";
+import { address, type KeyPairSigner } from "@solana/kit";
 import { purchaseCostMicroUsd, sumMicroUsd, tokenPriceMicroUsd, toMicroUsd } from "../calc/sale";
 import { homeValueAfterYears, settle } from "../calc/settlement";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import { buyShares, payAtClosing } from "./heiSale";
-import { settleHeiShares } from "./heiSettlement";
-import { loadOrCreateTestDollar, mintTestDollars, paymentBalance, type PaymentToken } from "./payment";
+import { receivedIn, settleHeiShares } from "./heiSettlement";
+import { loadOrCreateTestDollar, paymentBalance } from "./payment";
 import { allowlistInvestor, openFrozenAccount, readSupply, readTokenAccount, requireFunds, transactionLogs, type DevnetRpc } from "./solana";
 
 /** What the sale and the settlement need from the term sheet. */
@@ -48,7 +48,7 @@ export type SettlementRecord = {
   uncappedPayoutUsd: number;
   capApplied: boolean;
   ownerAnnualCost: number;
-  topUpMicroUsd: string; // SIMULATED: money added to the homeowner's wallet to pay
+  topUpMicroUsd: string; // SIMULATED: the homeowner's money for the payout, minted in the settlement transactions
   payouts: { owner: string; tokens: string; payoutMicroUsd: string; receivedMicroUsd: string }[];
   paidMicroUsd: string;
   supplyLeft: string;
@@ -75,17 +75,13 @@ export function sharesToBuy(allocated: bigint, alreadyHeld: bigint): bigint {
   return alreadyHeld >= allocated ? BigInt(0) : allocated - alreadyHeld;
 }
 
-/** Mints test dollars only up to what the wallet needs, so a retry does not mint again. */
-async function topUp(rpc: DevnetRpc, wallets: HeiWallets, token: PaymentToken, owner: Address, needed: bigint): Promise<void> {
-  const balance = await paymentBalance(rpc, token, owner);
-  if (balance < needed) await mintTestDollars(rpc, wallets.issuer, token, owner, needed - balance);
-}
-
 /**
  * KYC, closing and the primary sale. The partner pays the homeowner first (owner,
  * 2026-10-02), then sells; a buyer without KYC is refused on-chain. Safe to run again
  * after an interruption: each step looks at the chain first and skips what is done
- * (open KYC accounts, the closing payment's memo, shares an investor already holds).
+ * (open KYC accounts, the closing payment's once-only marker, shares an investor
+ * already holds). SIMULATED money (test dollars) is minted inside the transaction that
+ * spends it, so runs at the same time on the shared demo wallets cannot mix up balances.
  */
 export async function runPrimarySale(
   rpc: DevnetRpc,
@@ -116,14 +112,9 @@ export async function runPrimarySale(
     throw new Error("The shares are not where the sale left them: the treasury and the investors do not add up to the supply");
   }
 
-  // Test dollars: the partner's money for closing and each buyer's money (only what is missing).
   const token = await loadOrCreateTestDollar(rpc, issuer);
   const netCash = toMicroUsd(input.deal.netCashUsd);
   const toBuy = amounts.map((amount, index) => sharesToBuy(amount, held[index]));
-  await topUp(rpc, wallets, token, issuer.address, netCash);
-  for (const [index, investor] of wallets.investors.entries()) {
-    if (toBuy[index] > BigInt(0)) await topUp(rpc, wallets, token, investor.wallet.address, purchaseCostMicroUsd(toBuy[index], price));
-  }
 
   // Closing: the partner pays the homeowner the net cash, once.
   const closing = await payAtClosing(rpc, issuer, token, homeowner.address, netCash, heiMint);
@@ -131,11 +122,10 @@ export async function runPrimarySale(
   // The buyer without KYC, while the treasury still has shares, so only KYC can stop it.
   let rejected: SaleRecord["rejected"];
   if (inTreasury >= REJECTED_TOKENS) {
-    await topUp(rpc, wallets, token, noKyc.address, purchaseCostMicroUsd(REJECTED_TOKENS, price));
     const before = await paymentBalance(rpc, token, noKyc.address);
     let reason = "";
     try {
-      await buyShares(rpc, issuer, { issuer, buyer: noKyc, heiMint, treasury, token, tokens: REJECTED_TOKENS, priceMicroUsd: price });
+      await buyShares(rpc, issuer, { issuer, buyer: noKyc, heiMint, treasury, token, tokens: REJECTED_TOKENS, priceMicroUsd: price, fundBuyer: true });
     } catch (error) {
       if (!transactionLogs(error).some((line) => line.includes("Account is frozen"))) throw error;
       reason = "Account is frozen";
@@ -153,7 +143,7 @@ export async function runPrimarySale(
     if (amounts[index] === BigInt(0)) continue;
     let signature: string | null = null;
     if (toBuy[index] > BigInt(0)) {
-      const bought = await buyShares(rpc, issuer, { issuer, buyer: investor.wallet, heiMint, treasury, token, tokens: toBuy[index], priceMicroUsd: price });
+      const bought = await buyShares(rpc, issuer, { issuer, buyer: investor.wallet, heiMint, treasury, token, tokens: toBuy[index], priceMicroUsd: price, fundBuyer: true });
       signature = bought.signature;
     }
     purchases.push({
@@ -181,7 +171,8 @@ export async function runPrimarySale(
 /**
  * Settlement after `years` (buyback, or maturity at the end of the term) with the home
  * valued by a simulated appraisal at `growth` a year. Pays every holder and burns its
- * shares in the same transaction, then reads the balances back.
+ * shares in the same transaction, then reads back from those transactions what each
+ * holder received, and the supply left.
  */
 export async function runSettlement(
   rpc: DevnetRpc,
@@ -209,13 +200,7 @@ export async function runSettlement(
   const payout = toMicroUsd(result.payoutUsd);
   const trigger = years >= deal.termYears ? "maturity" : "buyback";
 
-  // SIMULATED: the homeowner's money for the payout (savings, refinancing or a sale).
-  const balance = await paymentBalance(rpc, token, homeowner.address);
-  const topUp = balance < payout ? payout - balance : BigInt(0);
-  if (topUp > BigInt(0)) await mintTestDollars(rpc, issuer, token, homeowner.address, topUp);
-
   const owners = input.sale.purchases.map((purchase) => address(purchase.owner));
-  const before = await Promise.all(owners.map((owner) => paymentBalance(rpc, token, owner)));
   const memo = `ownflow settlement v1 mint=${heiMint} trigger=${trigger} years=${years} value=${homeValueUsd.toFixed(2)} payout=${payout} registry=${deal.registryVersion}`;
   const run = await settleHeiShares(rpc, {
     homeowner,
@@ -226,14 +211,16 @@ export async function runSettlement(
     payoutMicroUsd: payout,
     tokenSupply: BigInt(deal.tokenSupply),
     memo,
+    fundHomeowner: true, // SIMULATED: the homeowner's money (savings, refinancing or a sale)
   });
 
-  // Read back: each holder's dollars went up by its share, and no shares are left.
+  // Read back: each holder received its share in the settlement transactions, and no shares are left.
+  const receivedBy = await receivedIn(rpc, run.batches, token.mint);
   const payouts: SettlementRecord["payouts"] = [];
-  let correct = true;
-  for (const [index, owner] of owners.entries()) {
+  let correct = run.payouts.length > 0;
+  for (const owner of owners) {
     const expected = run.payouts.find((item) => item.owner === owner);
-    const received = (await paymentBalance(rpc, token, owner)) - before[index];
+    const received = receivedBy.get(owner) ?? BigInt(0);
     correct &&= received === (expected?.payoutMicroUsd ?? BigInt(0));
     payouts.push({ owner, tokens: String(expected?.tokens ?? BigInt(0)), payoutMicroUsd: String(expected?.payoutMicroUsd ?? BigInt(0)), receivedMicroUsd: String(received) });
   }
@@ -249,7 +236,7 @@ export async function runSettlement(
     uncappedPayoutUsd: result.uncappedPayoutUsd,
     capApplied: result.capApplied,
     ownerAnnualCost: result.ownerAnnualCost,
-    topUpMicroUsd: String(topUp),
+    topUpMicroUsd: String(run.paidMicroUsd),
     payouts,
     paidMicroUsd: String(run.paidMicroUsd),
     supplyLeft: String(supplyLeft),

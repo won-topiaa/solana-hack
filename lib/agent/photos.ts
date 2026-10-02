@@ -11,6 +11,28 @@ export const PHOTO_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image
 /** Keeps a request with several photos well under Gemini's 20 MB inline limit. */
 export const MAX_PHOTO_BYTES = 7 * 1024 * 1024;
 
+/**
+ * The file's first bytes must match its declared type, so a request cannot pass other
+ * data off as a photo. Signatures: JPEG FF D8 FF; PNG 89 50 4E 47 0D 0A 1A 0A;
+ * WEBP "RIFF" then "WEBP" at byte 8; HEIC/HEIF an ISO box "ftyp" at byte 4.
+ */
+export function looksLikeImage(mimeType: string, bytes: Uint8Array): boolean {
+  const ascii = (start: number, end: number) => String.fromCharCode(...bytes.subarray(start, end));
+  switch (mimeType) {
+    case "image/jpeg":
+      return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    case "image/png":
+      return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => bytes[index] === byte);
+    case "image/webp":
+      return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
+    case "image/heic":
+    case "image/heif":
+      return ascii(4, 8) === "ftyp";
+    default:
+      return false;
+  }
+}
+
 export function addPhoto(
   caseFile: CaseFile,
   photo: { mimeType: string; bytes: Uint8Array },
@@ -22,6 +44,7 @@ export function addPhoto(
   if (photo.bytes.length === 0 || photo.bytes.length > MAX_PHOTO_BYTES) {
     throw new Error(`A photo must be between 1 byte and ${MAX_PHOTO_BYTES / (1024 * 1024)} MB`);
   }
+  if (!looksLikeImage(photo.mimeType, photo.bytes)) throw new Error(`The file is not a ${photo.mimeType} image`);
   const photoId = `photo-${Object.keys(caseFile.photos).length + 1}`;
   const stored = {
     mimeType: photo.mimeType,

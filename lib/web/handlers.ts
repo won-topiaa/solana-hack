@@ -36,8 +36,21 @@ const MAX_TEXT_CHARS = 2_000;
  * limit bounds how fast cases can be started.
  */
 export const CASE_LIMITS = { messages: 40, photos: 6 };
+
+/**
+ * Every request carries the case, and Vercel accepts request bodies up to 4.5 MB
+ * (https://vercel.com/docs/functions/limitations). Photos the agent has not read yet stay
+ * in the case with their bytes, so a new photo plus those still unread must fit in this.
+ * The browser sends 1600-pixel JPEGs, usually well under 1 MB.
+ */
+export const WEB_PHOTO_BYTES = Math.min(MAX_PHOTO_BYTES, 2.5 * 1024 * 1024);
 /** Base64 is 4 characters per 3 bytes. */
-const MAX_PHOTO_BASE64_CHARS = Math.ceil(MAX_PHOTO_BYTES / 3) * 4;
+const MAX_PHOTO_BASE64_CHARS = Math.ceil(WEB_PHOTO_BYTES / 3) * 4;
+
+/** Bytes of the photos still kept whole in the case (not read yet). */
+function unreadPhotoBytes(caseFile: CaseFile): number {
+  return Object.values(caseFile.photos).reduce((sum, photo) => sum + (photo.dataBase64 ? Math.floor((photo.dataBase64.length * 3) / 4) : 0), 0);
+}
 
 function currentTime(deps: WebDeps): Date {
   return deps.now?.() ?? new Date();
@@ -70,7 +83,7 @@ function photoFrom(value: unknown): { mimeType: string; bytes: Uint8Array } | un
   if (value === undefined || value === null) return undefined;
   const photo = value as { mimeType?: unknown; dataBase64?: unknown };
   if (typeof photo.mimeType !== "string" || typeof photo.dataBase64 !== "string") throw new BadRequest("A photo needs mimeType and dataBase64");
-  if (photo.dataBase64.length > MAX_PHOTO_BASE64_CHARS) throw new BadRequest(`A photo must be at most ${MAX_PHOTO_BYTES / (1024 * 1024)} MB`);
+  if (photo.dataBase64.length > MAX_PHOTO_BASE64_CHARS) throw new BadRequest(`A photo must be at most ${WEB_PHOTO_BYTES / (1024 * 1024)} MB`);
   return { mimeType: photo.mimeType, bytes: Buffer.from(photo.dataBase64, "base64") };
 }
 
@@ -86,6 +99,9 @@ export async function postMessage(deps: WebDeps, input: { token: unknown; text: 
   const photo = photoFrom(input.photo);
   if (photo && Object.keys(caseFile.photos).length >= CASE_LIMITS.photos) {
     throw new BadRequest(`This demo case has reached its limit of ${CASE_LIMITS.photos} photos. Start a new case to add more.`);
+  }
+  if (photo && unreadPhotoBytes(caseFile) + photo.bytes.length > WEB_PHOTO_BYTES) {
+    throw new BadRequest("Ask the agent to read the photos you already sent before adding more.");
   }
   if (photo) {
     try {

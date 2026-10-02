@@ -7,23 +7,27 @@ import type { Address, Instruction, KeyPairSigner, Signature, TransactionSigner 
 import { getAddMemoInstruction } from "@solana-program/memo";
 import { getTransferCheckedInstruction } from "@solana-program/token-2022";
 import { purchaseCostMicroUsd } from "../calc/sale";
-import { openPaymentAccountInstruction, paymentAccount, paymentInstruction, type PaymentToken } from "./payment";
-import { sendInstructions, tokenAccount, type DevnetRpc } from "./solana";
+import { mintTestDollarsInstruction, openPaymentAccountInstruction, paymentInstruction, type PaymentToken } from "./payment";
+import { accountExists, oldestSignatures, onceMarker, onceMarkerInstruction, sendInstructions, tokenAccount, type DevnetRpc } from "./solana";
 
-/** The memo on a closing payment: it names the HEI, so a retried sale can see the payment was made. */
+/** The memo on a closing payment: it names the HEI, for anyone reading the transaction. */
 export function closingMemo(heiMint: Address): string {
   return `ownflow closing v1 mint=${heiMint}`;
 }
 
-/** The successful earlier closing payment for this HEI, from the memos on the homeowner's account. */
-export function findClosing(entries: readonly { signature: string; memo: string | null; err: unknown }[], heiMint: Address): string | null {
-  const marker = closingMemo(heiMint);
-  return entries.find((entry) => entry.err === null && entry.memo?.includes(marker))?.signature ?? null;
+/** The earlier closing payment of this HEI, found through its once-only marker. */
+async function earlierClosing(rpc: DevnetRpc, marker: Address): Promise<Signature | null> {
+  if (!(await accountExists(rpc, marker))) return null;
+  const [signature] = await oldestSignatures(rpc, marker, 1);
+  if (!signature) throw new Error(`The closing marker ${marker} exists but its transaction was not found; try again in a minute`);
+  return signature;
 }
 
 /**
- * Closing: the partner pays the homeowner the net cash C, once. If an earlier attempt
- * already paid (its memo is on the homeowner's account), that payment is returned instead.
+ * Closing: the partner pays the homeowner the net cash C, once. The payment creates a
+ * marker account only the issuer can create, so a second payment for the same HEI fails
+ * on-chain; a retry finds the first payment through the marker and returns it.
+ * SIMULATED: the partner's own funds, minted as test dollars in the same transaction.
  */
 export async function payAtClosing(
   rpc: DevnetRpc,
@@ -33,23 +37,25 @@ export async function payAtClosing(
   amountMicroUsd: bigint,
   heiMint: Address,
 ): Promise<{ signature: Signature; alreadyPaid: boolean }> {
-  const account = await paymentAccount(homeowner, token);
-  if (await readExists(rpc, account)) {
-    const recent = await rpc.getSignaturesForAddress(account, { limit: 50 }).send();
-    const earlier = findClosing(recent, heiMint);
-    if (earlier) return { signature: earlier as Signature, alreadyPaid: true };
+  const marker = await onceMarker(issuer, closingMemo(heiMint));
+  const earlier = await earlierClosing(rpc, marker.address);
+  if (earlier) return { signature: earlier, alreadyPaid: true };
+  try {
+    const signature = await sendInstructions(rpc, issuer, [
+      getAddMemoInstruction({ memo: closingMemo(heiMint) }),
+      await onceMarkerInstruction(rpc, issuer, marker),
+      await openPaymentAccountInstruction(issuer, issuer.address, token),
+      await mintTestDollarsInstruction(token, issuer, issuer.address, amountMicroUsd),
+      await openPaymentAccountInstruction(issuer, homeowner, token),
+      await paymentInstruction(token, issuer, homeowner, amountMicroUsd),
+    ]);
+    return { signature, alreadyPaid: false };
+  } catch (error) {
+    // Another run may have paid at the same moment: then its payment is the closing.
+    const paid = await earlierClosing(rpc, marker.address).catch(() => null);
+    if (paid) return { signature: paid, alreadyPaid: true };
+    throw error;
   }
-  const signature = await sendInstructions(rpc, issuer, [
-    getAddMemoInstruction({ memo: closingMemo(heiMint) }),
-    await openPaymentAccountInstruction(issuer, homeowner, token),
-    await paymentInstruction(token, issuer, homeowner, amountMicroUsd),
-  ]);
-  return { signature, alreadyPaid: false };
-}
-
-async function readExists(rpc: DevnetRpc, account: Address): Promise<boolean> {
-  const { value } = await rpc.getAccountInfo(account, { encoding: "base64" }).send();
-  return value !== null;
 }
 
 export type Purchase = {
@@ -60,6 +66,8 @@ export type Purchase = {
   token: PaymentToken;
   tokens: bigint;
   priceMicroUsd: bigint;
+  /** SIMULATED: mint the buyer's test dollars in the same transaction (the demo investors have none). */
+  fundBuyer: boolean;
 };
 
 /**
@@ -69,8 +77,15 @@ export type Purchase = {
  */
 export async function purchaseInstructions(purchase: Purchase): Promise<Instruction[]> {
   const cost = purchaseCostMicroUsd(purchase.tokens, purchase.priceMicroUsd);
+  const funding = purchase.fundBuyer
+    ? [
+        await openPaymentAccountInstruction(purchase.issuer, purchase.buyer.address, purchase.token),
+        await mintTestDollarsInstruction(purchase.token, purchase.issuer, purchase.buyer.address, cost),
+      ]
+    : [];
   return [
     await openPaymentAccountInstruction(purchase.issuer, purchase.issuer.address, purchase.token),
+    ...funding,
     await paymentInstruction(purchase.token, purchase.buyer, purchase.issuer.address, cost),
     getTransferCheckedInstruction({
       source: purchase.treasury,

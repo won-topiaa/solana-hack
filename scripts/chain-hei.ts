@@ -12,7 +12,7 @@ import { createInterface } from "node:readline/promises";
 import { createAgentTools } from "../lib/agent/tools";
 import { createDevnetChain } from "../lib/chain/devnet";
 import { runPrimarySale, runSettlement, type HeiWallets } from "../lib/chain/heiLifecycle";
-import { createDevnetRpc, explorerAddressUrl, explorerTxUrl, getSolBalance } from "../lib/chain/solana";
+import { createDevnetRpc, explorerAddressUrl, explorerTxUrl, getSolBalance, MIN_ISSUER_SOL } from "../lib/chain/solana";
 import { loadOrCreateWallet } from "../lib/chain/wallets";
 import { formatMicroUsd, formatMicroUsdExact, formatPercent, formatUsd } from "../lib/format";
 import { createDemoPropertySource } from "../lib/integrations/rentcast";
@@ -21,7 +21,6 @@ import { getRegistry } from "../lib/params/load";
 import { personaCase } from "../lib/recommend/personas";
 import { createStepRunner } from "./agentSteps";
 
-const MIN_ISSUER_SOL = 0.1;
 
 function option(name: string, fallback: number): number {
   const at = process.argv.indexOf(`--${name}`);
@@ -97,7 +96,7 @@ async function main() {
       `homeowner's cost ${formatPercent(settled.ownerAnnualCost * 100)} a year.`,
   );
   if (BigInt(settled.topUpMicroUsd) > BigInt(0)) {
-    console.log(`SIMULATED: the homeowner's money for the payout (savings, refinancing or a sale) arrives: +${formatMicroUsd(BigInt(settled.topUpMicroUsd))}.`);
+    console.log(`SIMULATED: the homeowner's money for the payout (savings, refinancing or a sale), minted as test dollars in the settlement transactions: ${formatMicroUsd(BigInt(settled.topUpMicroUsd))}.`);
   }
   for (const signature of settled.signatures) console.log(`Transaction: ${explorerTxUrl(signature)}`);
 

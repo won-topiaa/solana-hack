@@ -37,6 +37,17 @@ const HEI_KEYS = [
   "hei_term_years",
 ];
 
+/**
+ * Why the home cannot carry this amount at all: the mortgage plus the new money would be
+ * more than the home is worth. Lenders' own limits are lower; this is only the floor of
+ * what is possible. null when it fits or the mortgage is unknown.
+ */
+function overEquity(home: HomeInput, amountUsd: number, label: string): string | null {
+  if (home.mortgageBalanceUsd === undefined) return null;
+  const share = combinedLoanToValue(home.mortgageBalanceUsd, amountUsd, home.valueUsd);
+  return share > 1 ? `The mortgage plus this ${label} would be ${pct(share)} of the home's value: more than the home is worth.` : null;
+}
+
 /** A warning when all loans together pass the loan-to-value the average rates assume. */
 function cltvRisk(home: HomeInput, amountUsd: number, basis: number): string[] {
   if (home.mortgageBalanceUsd === undefined) {
@@ -48,6 +59,7 @@ function cltvRisk(home: HomeInput, amountUsd: number, basis: number): string[] {
 }
 
 export function helocOption(id: string, home: HomeInput, amountUsd: number, years: number, terms: RealEstateTerms): PathOption {
+  const tooMuch = overEquity(home, amountUsd, "loan");
   return {
     id,
     lane: "real_estate",
@@ -65,13 +77,15 @@ export function helocOption(id: string, home: HomeInput, amountUsd: number, year
       "Needs lender approval (credit and home equity).",
       ...cltvRisk(home, amountUsd, terms.rateCltvBasis),
     ],
-    suitable: true,
+    suitable: tooMuch === null,
+    whyNotSuitable: tooMuch ?? undefined,
     usedParamKeys: ["heloc_avg_rate", "heloc_avg_rate_cltv_basis"],
   };
 }
 
 export function homeEquityLoanOption(home: HomeInput, amountUsd: number, years: number, terms: RealEstateTerms): PathOption {
   const monthly = amortizedMonthlyPaymentUsd(amountUsd, terms.homeEquityLoanRate, years);
+  const tooMuch = overEquity(home, amountUsd, "loan");
   return {
     id: "re-home-equity-loan",
     lane: "real_estate",
@@ -88,7 +102,8 @@ export function homeEquityLoanOption(home: HomeInput, amountUsd: number, years: 
       "Needs lender approval (credit and home equity).",
       ...cltvRisk(home, amountUsd, terms.rateCltvBasis),
     ],
-    suitable: true,
+    suitable: tooMuch === null,
+    whyNotSuitable: tooMuch ?? undefined,
     usedParamKeys: ["home_equity_loan_avg_rate", "heloc_avg_rate_cltv_basis"],
   };
 }
@@ -109,6 +124,9 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
     const reason = `It would need ${pct(share)} of the home value; the limit is ${pct(terms.hei.maxInvestmentShareOfValue)}.`;
     return { ...base, cashNowUsd: 0, risks: [reason], informational: true, suitable: false, whyNotSuitable: reason };
   }
+  // The investors' claim comes after the mortgage, so the home must have room for it too.
+  const tooMuch = overEquity(home, hei.grossInvestmentUsd, "investment");
+  if (tooMuch) return { ...base, cashNowUsd: 0, risks: [tooMuch], informational: true, suitable: false, whyNotSuitable: tooMuch };
 
   // Settlement at the user's planned horizon (early settlement is allowed), never past the longest term.
   const settleYears = Math.min(years, terms.heiTermYears.max);
@@ -121,7 +139,7 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
       years: settleYears,
       homeValueAtSettlementUsd: homeValueAfterYears(home.valueUsd, growth, settleYears),
     });
-    return { growth, payoutUsd: result.payoutUsd, totalCostUsd: result.payoutUsd - amountUsd, effectiveAnnualCost: result.ownerAnnualCost };
+    return { growth, years: settleYears, payoutUsd: result.payoutUsd, totalCostUsd: result.payoutUsd - amountUsd, effectiveAnnualCost: result.ownerAnnualCost };
   });
   // Ranking uses the costliest scenario, so an HEI is never chosen on an optimistic guess.
   const costliest = scenarios.reduce((a, b) => (b.totalCostUsd > a.totalCostUsd ? b : a));

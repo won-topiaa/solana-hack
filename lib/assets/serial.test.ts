@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashSerial, newSalt, normalizeSerial } from "./serial";
+import { hashSerial, newSalt, normalizeSerial, redactSerial } from "./serial";
 
 describe("serial numbers", () => {
   it("treat spacing, dashes and case as the same serial", () => {
@@ -15,6 +15,13 @@ describe("serial numbers", () => {
     const hash = hashSerial("DW7731842", newSalt());
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
     expect(hash).not.toContain("7731842");
+  });
+
+  it("are blanked out of a text however they are written", () => {
+    const text = "Serial DW7731842 on the case back; papers say dw 773-1842 and Dw-7731842.";
+    const redacted = redactSerial(text, "DW 773-1842");
+    expect(redacted).toBe("Serial [serial] on the case back; papers say [serial] and [serial].");
+    expect(redactSerial("No serial here.", "")).toBe("No serial here.");
   });
 
   it("make a new random salt each time", () => {

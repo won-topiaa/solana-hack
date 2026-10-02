@@ -19,7 +19,7 @@ Last updated: 2026-10-02 (milestone M10: web design).
 | @solana-program/token-2022 | 0.19.0 | Apache-2.0 | https://github.com/solana-program/token-2022 |
 | @solana-program/system | 0.15.0 | Apache-2.0 | https://github.com/solana-program/system |
 | @solana-program/memo | 0.15.0 | Apache-2.0 | https://github.com/solana-program/memo |
-| lucide-react | 1.50.0 | ISC | https://github.com/lucide-icons/lucide |
+| lucide-react | 1.50.0 | ISC; icons derived from Feather are MIT (both texts in `node_modules/lucide-react/LICENSE`) | https://github.com/lucide-icons/lucide |
 
 ## Development dependencies
 

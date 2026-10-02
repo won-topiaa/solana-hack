@@ -37,7 +37,7 @@ export async function createAgentServices(env: Env = process.env): Promise<Agent
   const rentcastKey = env.RENTCAST_API_KEY;
   const useRentcast = Boolean(rentcastKey) && env.PROPERTY_DATA_SOURCE !== "demo";
   const propertySource = useRentcast
-    ? withCache(createRentcastSource(rentcastKey as string), createFileStore())
+    ? withCache(createRentcastSource(rentcastKey as string), env.VERCEL ? createMemoryStore() : createFileStore()) // Vercel's disk is read-only
     : withCache(createDemoPropertySource(), createMemoryStore());
   // Plaid (sandbox test data) is offered only when both Plaid values are set.
   const { PLAID_CLIENT_ID: clientId, PLAID_SECRET: secret } = env;

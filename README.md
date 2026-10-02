@@ -134,24 +134,24 @@ buyback pays exactly $144,000.069760 and $80,765.799126.
 | Step | On-chain | Signed by |
 |---|---|---|
 | Recommendation receipt | Memo: `ownflow receipt v1 rec=<hash> passports=<hash> registry=<version> selected=<path>` | User wallet |
-| HEI share token | Token-2022 mint, decimals 0, supply 234,131, extensions: DefaultAccountState (frozen), PermanentDelegate (issuer, for settlement), MetadataPointer + TokenMetadata (passport and recommendation hashes; update authority removed); mint authority removed | Issuer |
-| Watch 1-of-1 token | Token-2022 mint, supply 1, mint authority removed, metadata locked, held by the user | Issuer |
+| HEI share token | Token-2022 mint, decimals 0, supply 234,131, extensions: DefaultAccountState (frozen), PermanentDelegate (issuer, for settlement), MetadataPointer + TokenMetadata (passport and recommendation hashes; update authority removed); mint authority removed. The mint address is derived from the issuer's signature over the receipt hashes, so one receipt can only ever make one token | Issuer |
+| Watch 1-of-1 token | Token-2022 mint, supply 1, mint authority removed, metadata locked, held by the user; address derived the same way | Issuer |
 | KYC allowlist | Investor accounts thawed by the issuer; others stay frozen | Issuer |
-| Closing | Test-dollar payment to the homeowner, with a memo naming the HEI | Issuer |
-| Primary sale | One transaction: buyer's test dollars → issuer, shares → buyer | Buyer + issuer |
-| Settlement | Memo, then for each holder: payment from the homeowner + burn of that holder's shares | Homeowner + issuer |
+| Closing | Test-dollar payment to the homeowner, with a memo naming the HEI and a once-only marker account (created "with seed" from the issuer), so a second closing payment for the same HEI fails on-chain | Issuer |
+| Primary sale | One transaction: the buyer's test dollars are minted (simulated investor money), paid to the issuer, and the shares go to the buyer | Buyer + issuer |
+| Settlement | Memo, the homeowner's test dollars for the batch (simulated), then for each holder: payment from the homeowner + burn of that holder's shares. Refused once every share is burned | Homeowner + issuer |
 
 **Off-chain:** addresses, names, serial numbers, photos, the case file, the comparison and the term
 sheet. Only their hashes go on-chain.
 
 Sample records from one run (devnet):
-[receipt](https://explorer.solana.com/tx/3hqvpnyuB929teDwEuUFcrmaFn6WFs3EDLqfeGmtcPYNNU9ar3ihCHcJFb8qFsUKdZ7Tem1TL2Q23wbEXUMp5GAC?cluster=devnet) ·
-[HEI share token](https://explorer.solana.com/address/5KNj2WDiru1BAnpgCEKhUwrdYMNcGirz5xhBCbodpAXY?cluster=devnet) ·
-[closing](https://explorer.solana.com/tx/BcFDBtHWCw258bju9MSpAcvUWkjD8CJ7oB1KCR6AZPo147BYJM39am4eWqhf2nv3dBDNZdmbT8niuV5xjQAqFja?cluster=devnet) ·
-[purchase 1](https://explorer.solana.com/tx/2KEB6EXyAhhjRXNrYA1ji35ugKqPHjuMPr7JwMUEr6HdaqGYd4vxof88hJR6Xw2mpEngVzJyWoa8wyvcjaKPxVf9?cluster=devnet) ·
-[purchase 2](https://explorer.solana.com/tx/3opmvWQ7iBTxANgmc1M3zQ95ahxi1bf7u9cLi5EDBMYnfvYDupdyxyyTV5oZWm1rsbjWmc1nNjwLgTVUhEKXCF5F?cluster=devnet) ·
-[account without KYC (frozen)](https://explorer.solana.com/address/3pDq2UP9k7G8sdvixn8fPdoopmrBMrdMjJxxyvPZWq5u?cluster=devnet) ·
-[settlement](https://explorer.solana.com/tx/5yqHLX3qiRTrQkhseQDQcnTHMRfKndVav2B1GBVeEkDvCf4pv9Crz6nxijS27yrKeXHnpbj7WYzSWbYySY7cB6aL?cluster=devnet) ·
+[receipt](https://explorer.solana.com/tx/2jawU4sGBacUu3fPtYd58U441Mev3qPCx8ktfQFejrJ9WmEJQ2t3UTS2eFDLMJZF7w2qimqqnt73oRjdjXLj5sV9?cluster=devnet) ·
+[HEI share token](https://explorer.solana.com/address/5LyafEJ95HWd7Jm8MsuFKNP2aiHHkpx1t2ciN2cB4fkZ?cluster=devnet) ·
+[closing](https://explorer.solana.com/tx/65WYs5vuFwBrbFhH4Sg87fcpSd7rHepiNjQ5WHcWHFYwAQG56rX1oaXecH3NVKW8pQtjBwzAMLHhEXbBjXKXLehe?cluster=devnet) ·
+[purchase 1](https://explorer.solana.com/tx/4HSrKhQ2bss4AxVxY2D4YZ676idd859u3uuTPQapqYEeNwC7hBPLZeJBynv9QoQwV5ZrBt6Y9iYT4kfhpYGWxP9R?cluster=devnet) ·
+[purchase 2](https://explorer.solana.com/tx/2AtmQqBBX5qWAHKECzwB25uuBmEiofbhF9B5nT1f94qy1okP5fLKSp6zScJM3HgBchu5fTfP5KWdEzuUdQYxY5h3?cluster=devnet) ·
+[account without KYC (frozen)](https://explorer.solana.com/address/2cWw1duekXpwfzAkeHPyA4p9urd3JmG5sDo7euUqueGi?cluster=devnet) ·
+[settlement](https://explorer.solana.com/tx/2SQiQJF3e5d7T5Sg3bqMCCn1w8DubvC4pa5Vmfo2g2fgTcFTWsuZyeMsFGYHEjuAydPVeG7BVphrBxWV8RQzvXcn?cluster=devnet) ·
 [watch 1-of-1 token](https://explorer.solana.com/address/H9LZ68ws32rG1YSuFR2UdVNyjyqm7MSB3dLzFXFpp1av?cluster=devnet) ·
 [test dollar](https://explorer.solana.com/address/EkYSihFm4a6uz6yVDsYUg9nzJdXTFEayyPr9uM1XHfks?cluster=devnet)
 (devnet can be reset, which would remove them).
@@ -164,7 +164,9 @@ Sample records from one run (devnet):
 - **KYC, the appraisal, the vault intake and the stolen-watch registry.** Each is labeled
   "Simulated" where it appears.
 - **Time.** Devnet does not wait years: the settlement page lets you pick when and at what value the
-  HEI settles; the homeowner's money for the payout is minted to the demo wallet (labeled).
+  HEI settles; the homeowner's money for the payout is minted in the settlement transactions (labeled).
+  The partner's money at closing and the investors' money are minted the same way, inside the
+  transaction that spends them, so two demo runs at once never mix up the shared wallets' balances.
 - **Money.** Payments use "Demo USD (DUSD)", a devnet test token with no value and 6 decimals like
   USDC. Circle's devnet USDC faucet gives 20 USDC per address every 2 hours, far below a $150,000
   sale; the code takes the payment token as data so a real stablecoin could replace it.
@@ -183,8 +185,9 @@ Sample records from one run (devnet):
   value has a source, a date and a validity window. A recommendation is refused when a value it uses
   is out of date. For the judging period the deployed demo freezes the values on one date and says so
   under the comparison.
-- **The model is not trusted with numbers.** In the web app it never writes figures, hashes or
-  links; the panel shows code-made text. Tools that act (on-chain steps, a bank connection, a
+- **The model is not trusted with numbers.** In the web app it is told never to write figures,
+  hashes or links, and any amount or rate it writes anyway is replaced before the page shows it; the
+  panel shows code-made text. Tools that act (on-chain steps, a bank connection, a
   registry check) never run before you approve them.
 - **The server keeps no case.** Your case travels in your browser as a token sealed with AES-256-GCM;
   the browser can neither read nor change it.
@@ -194,8 +197,9 @@ Sample records from one run (devnet):
 ## Limits on the public demo
 
 40 messages and 6 photos per case, on-chain steps paused when the demo wallet runs low on devnet
-SOL, and a per-IP rate limit on the API. Devnet's public RPC can be busy; calls are retried, and the
-sale can be run again safely (it skips what is already done).
+SOL, and a per-IP rate limit on the API. Devnet's public RPC can be busy; calls are retried with a
+time limit. Every on-chain step can be run again safely: issuance finds the token it already made,
+the closing payment happens once, the sale skips what is done, and a settled HEI cannot settle again.
 
 ## Architecture
 

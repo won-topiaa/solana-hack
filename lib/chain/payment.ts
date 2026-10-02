@@ -38,6 +38,8 @@ export async function loadOrCreateTestDollar(rpc: DevnetRpc, issuer: KeyPairSign
   const token = (mint: Address): PaymentToken => ({ mint, program: TOKEN_2022_PROGRAM_ADDRESS, decimals: PAYMENT_DECIMALS, symbol: TEST_DOLLAR_INFO.symbol });
   // On a server without the file (Vercel), the mint comes from the environment and is never created there.
   if (process.env.DEVNET_TEST_DOLLAR_MINT) return token(address(process.env.DEVNET_TEST_DOLLAR_MINT));
+  // Vercel cannot keep a new mint's address (read-only disk), so it would make a new one each time.
+  if (process.env.VERCEL) throw new Error("DEVNET_TEST_DOLLAR_MINT is not set in the hosting's environment variables (see .env.example)");
   if (existsSync(file)) {
     const saved = address((JSON.parse(readFileSync(file, "utf8")) as { mint: string }).mint);
     // Devnet can be reset; then the saved mint is gone and a new one is made.
@@ -77,11 +79,21 @@ export async function paymentInstruction(token: PaymentToken, from: TransactionS
   );
 }
 
-/** Test dollars only: the issuer mints them to a wallet (a faucet for the demo). */
+/**
+ * Test dollars only: the issuer mints them into a wallet's account (a faucet for the
+ * demo). The account must exist, or be opened earlier in the same transaction. Minting
+ * the exact amount inside the transaction that spends it means two demo cases running at
+ * once never spend each other's money.
+ */
+export async function mintTestDollarsInstruction(token: PaymentToken, issuer: TransactionSigner, owner: Address, amountMicroUsd: bigint): Promise<Instruction> {
+  return getMintToInstruction({ mint: token.mint, token: await paymentAccount(owner, token), mintAuthority: issuer, amount: amountMicroUsd }, { programAddress: token.program });
+}
+
+/** Test dollars only: opens the wallet's account if needed and mints into it. */
 export async function mintTestDollars(rpc: DevnetRpc, issuer: KeyPairSigner, token: PaymentToken, owner: Address, amountMicroUsd: bigint): Promise<Signature> {
   return sendInstructions(rpc, issuer, [
     await openPaymentAccountInstruction(issuer, owner, token),
-    getMintToInstruction({ mint: token.mint, token: await paymentAccount(owner, token), mintAuthority: issuer, amount: amountMicroUsd }, { programAddress: token.program }),
+    await mintTestDollarsInstruction(token, issuer, owner, amountMicroUsd),
   ]);
 }
 

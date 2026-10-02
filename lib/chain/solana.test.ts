@@ -22,7 +22,7 @@ import {
 } from "@solana-program/token-2022";
 import { describe, expect, it } from "vitest";
 import { heiTokenInfo, watchTokenInfo } from "./devnet";
-import { createMintInstructions, HEI_SHARE_MINT, transactionLogs, WATCH_TOKEN_MINT } from "./solana";
+import { createMintInstructions, HEI_SHARE_MINT, issuerDerivedSigner, onceMarker, transactionLogs, WATCH_TOKEN_MINT } from "./solana";
 
 // Real hashes are 64 hex characters; these have the same length.
 const hashes = { passportHash: "a".repeat(64), recommendationHash: "b".repeat(64) };
@@ -97,5 +97,24 @@ describe("transactionLogs", () => {
     });
     expect(transactionLogs(outer)).toContain("Program log: Error: Account is frozen");
     expect(transactionLogs(new Error("network down"))).toEqual([]);
+  });
+});
+
+describe("addresses that make a step happen only once", () => {
+  it("are the same for the same issuer and label, and differ otherwise", async () => {
+    // Extractable keys are not needed: the issuer only signs.
+    const [issuer, other] = await Promise.all([generateKeyPairSigner(), generateKeyPairSigner()]);
+    const mint = await issuerDerivedSigner(issuer, "ownflow hei shares v1 rec=a passport=b");
+    expect((await issuerDerivedSigner(issuer, "ownflow hei shares v1 rec=a passport=b")).address).toBe(mint.address);
+    expect((await issuerDerivedSigner(issuer, "ownflow hei shares v1 rec=a passport=c")).address).not.toBe(mint.address);
+    expect((await issuerDerivedSigner(other, "ownflow hei shares v1 rec=a passport=b")).address).not.toBe(mint.address);
+  });
+
+  it("give a marker seed of at most 32 characters that is not the label", async () => {
+    const issuer = await generateKeyPairSigner();
+    const marker = await onceMarker(issuer, "ownflow closing v1 mint=abc");
+    expect(marker.seed).toMatch(/^[0-9a-f]{32}$/);
+    expect((await onceMarker(issuer, "ownflow closing v1 mint=abc")).address).toBe(marker.address);
+    expect((await onceMarker(issuer, "ownflow closing v1 mint=xyz")).address).not.toBe(marker.address);
   });
 });

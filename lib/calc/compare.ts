@@ -27,12 +27,17 @@ export function interestOnlyTotalUsd(
   return balanceUsd * annualRate * years;
 }
 
+/** Monthly payments over `years`, at least one (a horizon of a few days still means one payment). */
+function loanMonths(years: number): number {
+  return Math.max(1, Math.round(years * 12));
+}
+
 /** Equal monthly payment that repays `principalUsd` with interest over `years` (standard amortization). */
 export function amortizedMonthlyPaymentUsd(principalUsd: number, annualRate: number, years: number): number {
   requirePositive("principalUsd", principalUsd);
   requireNonNegative("annualRate", annualRate);
   requirePositive("years", years);
-  const months = Math.round(years * 12);
+  const months = loanMonths(years);
   const monthlyRate = annualRate / 12;
   if (monthlyRate === 0) return principalUsd / months;
   return (principalUsd * monthlyRate) / (1 - (1 + monthlyRate) ** -months);
@@ -40,7 +45,7 @@ export function amortizedMonthlyPaymentUsd(principalUsd: number, annualRate: num
 
 /** Interest paid over the life of that amortized loan: all payments minus the principal. */
 export function amortizedTotalInterestUsd(principalUsd: number, annualRate: number, years: number): number {
-  return amortizedMonthlyPaymentUsd(principalUsd, annualRate, years) * Math.round(years * 12) - principalUsd;
+  return amortizedMonthlyPaymentUsd(principalUsd, annualRate, years) * loanMonths(years) - principalUsd;
 }
 
 /** Combined loan-to-value: all loans on the home (existing + new) divided by its value. */

@@ -21,10 +21,15 @@ import {
   type RealEstateTerms,
 } from "./realEstate";
 import type { AssetSummary, PathOption, RecommendationResult } from "./types";
-import { allWatchOptions, combineOptions, goalNote, watchPlan, type WatchInput } from "./watches";
+import { allWatchOptions, combineOptions, goalNote, watchPlan, type WatchInput, type WatchTerms } from "./watches";
 
 /** Settings the rules read; they are always part of the freshness check. */
-const RULE_KEYS = ["heloc_first_threshold_years", "watch_dealer_urgent_days", "comparison_default_horizon_years", "watch_loan_term_days"];
+/** Registry values the rules read, per lane, so a home case is not blocked by a watch value. */
+const RULE_KEYS = {
+  common: ["comparison_default_horizon_years"],
+  home: ["heloc_first_threshold_years"],
+  watch: ["watch_dealer_urgent_days", "watch_loan_term_days"],
+};
 
 export function watchLabel(watch: WatchAsset): string {
   return watch.model ?? watch.reference ?? watch.id;
@@ -95,6 +100,20 @@ export function realEstateTerms(registry: Registry): RealEstateTerms {
   };
 }
 
+/**
+ * A single watch path is suitable only when it can reach the goal by itself (the plan
+ * combines watches), and a watch loan only when you repay within its longest term.
+ */
+function watchSuitability(option: PathOption, need: number, horizonDays: number, terms: WatchTerms): PathOption {
+  if (!option.suitable) return option;
+  if (option.id.startsWith("w-loan-") && horizonDays > terms.loanTermDays.max) {
+    return { ...option, suitable: false, whyNotSuitable: `Watch loans last at most ${terms.loanTermDays.max} days; you plan to repay later.` };
+  }
+  const high = option.cashRangeUsd?.high ?? option.cashNowUsd;
+  if (high < need) return { ...option, suitable: false, whyNotSuitable: `Brings at most ${formatUsd(high)} of the ${formatUsd(need)} you need.` };
+  return option;
+}
+
 function cheapest(options: PathOption[]): PathOption {
   return options.reduce((a, b) => ((b.totalCostUsd ?? Infinity) < (a.totalCostUsd ?? Infinity) ? b : a));
 }
@@ -159,11 +178,14 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
       category: watch.category,
       kept: kept.has(watch.id),
     }));
-    for (const watch of watchInputs) options.push(...allWatchOptions(watch, watchT));
     const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: years * 365, urgentDays: settings.dealerUrgentDays };
+    for (const watch of watchInputs) options.push(...allWatchOptions(watch, watchT).map((option) => watchSuitability(option, need, timing.horizonDays, watchT)));
     const result = watchPlan(watchInputs, need, timing, watchT);
     plan = result.plan;
-    if (plan?.parts) options.push(plan);
+    if (plan?.parts) {
+      const high = plan.cashRangeUsd?.high ?? plan.cashNowUsd;
+      options.push(high >= need ? plan : { ...plan, suitable: false, whyNotSuitable: goalNote(plan, need) ?? "Does not reach the goal." });
+    }
     rulesFired.push(...result.rules);
     const high = plan ? plan.cashRangeUsd?.high ?? plan.cashNowUsd : 0;
     if (plan && high >= need) {
@@ -205,7 +227,8 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
 
   // M2 gate: every registry value behind these numbers must be fresh (on the freeze date
   // when the registry is frozen for the judging period).
-  const usedKeys = [...new Set([...options.flatMap((option) => option.usedParamKeys), ...RULE_KEYS])];
+  const ruleKeys = [...RULE_KEYS.common, ...(homeInput ? RULE_KEYS.home : []), ...(watches.length > 0 ? RULE_KEYS.watch : [])];
+  const usedKeys = [...new Set([...options.flatMap((option) => option.usedParamKeys), ...ruleKeys])];
   const freshness = checkParamsFresh(registry, usedKeys, registry.frozenOn ?? today);
   if (!freshness.ok) return { status: "needs_fresh_data", registryVersion: freshness.registryVersion, stale: freshness.stale };
 

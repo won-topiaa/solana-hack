@@ -6,7 +6,8 @@ import type { WatchCategory } from "../calc/watch";
 export type Lane = "real_estate" | "watch" | "cross";
 
 /** One HEI outcome under an assumed yearly home price growth. */
-export type Scenario = { growth: number; payoutUsd: number; totalCostUsd: number; effectiveAnnualCost: number };
+/** An HEI settlement scenario; `years` is when it settles (the horizon, at most the longest term). */
+export type Scenario = { growth: number; years: number; payoutUsd: number; totalCostUsd: number; effectiveAnnualCost: number };
 
 export type PathOption = {
   id: string;

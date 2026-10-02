@@ -22,9 +22,10 @@ export function latestObservation(fredJson: unknown): Observation | null {
   if (!Array.isArray(observations)) throw new Error("FRED response has no observations list");
   let latest: Observation | null = null;
   for (const item of observations as { date?: unknown; value?: unknown }[]) {
+    // Days without data come back as a non-number (e.g. "."), so they are skipped;
+    // so is anything that is not a plain decimal string (null would read as 0%).
+    if (typeof item.date !== "string" || typeof item.value !== "string" || !/^-?\d+(\.\d+)?$/.test(item.value.trim())) continue;
     const percent = Number(item.value);
-    // Days without data come back as a non-number (e.g. "."), so they are skipped.
-    if (typeof item.date !== "string" || item.value === "" || !Number.isFinite(percent)) continue;
     if (latest === null || item.date > latest.date) {
       latest = { date: item.date, value: Number((percent / 100).toFixed(6)) };
     }
@@ -35,7 +36,9 @@ export function latestObservation(fredJson: unknown): Observation | null {
 /** Next registry version: YYYY-MM-DD.N, counting up within the same day. */
 export function nextRegistryVersion(current: string, today: string): string {
   const [day, counter] = current.split(".");
-  return day === today ? `${today}.${Number(counter) + 1}` : `${today}.1`;
+  // Never go back or repeat: a version dated today or later (e.g. a hand edit in another
+  // time zone) keeps its day and counts up, so every receipt names one set of values.
+  return day >= today ? `${day}.${Number(counter) + 1}` : `${today}.1`;
 }
 
 export type MarketUpdate = { key: string; observation: Observation };

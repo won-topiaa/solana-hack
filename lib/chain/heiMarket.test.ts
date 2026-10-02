@@ -14,13 +14,14 @@ import {
 import {
   identifyToken2022Instruction,
   parseBurnCheckedInstruction,
+  parseMintToInstruction,
   parseTransferCheckedInstruction,
   Token2022Instruction,
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
 import { describe, expect, it } from "vitest";
 import { allocation, sharesToBuy } from "./heiLifecycle";
-import { closingMemo, findClosing, purchaseInstructions } from "./heiSale";
+import { purchaseInstructions } from "./heiSale";
 import { HOLDERS_PER_TRANSACTION, payoutsFor, settleHeiShares, settlementInstructions, type ShareHolding } from "./heiSettlement";
 import { paymentAccount, type PaymentToken } from "./payment";
 import { tokenAccount, type DevnetRpc } from "./solana";
@@ -66,7 +67,13 @@ describe("a primary sale purchase (offline)", () => {
       token,
       tokens: BigInt(150_000),
       priceMicroUsd: BigInt(666_667),
+      fundBuyer: true,
     });
+    // SIMULATED: the buyer's test dollars are minted in the same transaction, exactly the cost.
+    const minted = kinds(steps).filter(({ kind }) => kind === Token2022Instruction.MintTo).map(({ ix }) => parseMintToInstruction(ix));
+    expect(minted).toHaveLength(1);
+    expect(minted[0].accounts.token.address).toBe(await paymentAccount(buyer.address, token));
+    expect(minted[0].data.amount).toBe(BigInt(100_000_050_000));
     const transfers = kinds(steps).filter(({ kind }) => kind === Token2022Instruction.TransferChecked).map(({ ix }) => parseTransferCheckedInstruction(ix));
 
     const [pay, shares] = transfers;
@@ -77,6 +84,14 @@ describe("a primary sale purchase (offline)", () => {
     expect(shares.accounts.destination.address).toBe(await tokenAccount(buyer.address, heiMint.address));
     expect(shares.data.amount).toBe(BigInt(150_000));
     expect(fitsInOneTransaction(issuer, steps)).toBe(true);
+  });
+
+  it("mints nothing for a buyer who brings its own dollars", async () => {
+    const [issuer, buyer, heiMint] = await signers(3);
+    const token = await testDollar();
+    const treasury = await tokenAccount(issuer.address, heiMint.address);
+    const steps = await purchaseInstructions({ issuer, buyer, heiMint: heiMint.address, treasury, token, tokens: BigInt(10), priceMicroUsd: BigInt(666_667), fundBuyer: false });
+    expect(kinds(steps).some(({ kind }) => kind === Token2022Instruction.MintTo)).toBe(false);
   });
 });
 
@@ -89,19 +104,23 @@ describe("a settlement batch (offline)", () => {
     const supply = holdings.reduce((sum, holding) => sum + holding.tokens, BigInt(0));
     const payouts = payoutsFor(BigInt(1_500_000_000), holdings, supply);
     const token = await testDollar();
-    const steps = await settlementInstructions({ homeowner, issuer, heiMint: heiMint.address, token, payouts, memo: "ownflow settlement v1 test" });
+    const steps = await settlementInstructions({ homeowner, issuer, heiMint: heiMint.address, token, payouts, memo: "ownflow settlement v1 test", fundHomeowner: true });
     return { homeowner, issuer, payouts, steps, token };
   }
 
   it("pays each holder and burns exactly that holder's tokens", async () => {
     const { homeowner, payouts, steps, token } = await batch(2);
-    const parts = kinds(steps);
+    const [fund, ...parts] = kinds(steps);
     expect(parts.map(({ kind }) => kind)).toEqual([
       Token2022Instruction.TransferChecked,
       Token2022Instruction.BurnChecked,
       Token2022Instruction.TransferChecked,
       Token2022Instruction.BurnChecked,
     ]);
+    // SIMULATED: the homeowner's money for exactly this batch, minted first in the same transaction.
+    expect(fund.kind).toBe(Token2022Instruction.MintTo);
+    expect(parseMintToInstruction(fund.ix).accounts.token.address).toBe(await paymentAccount(homeowner.address, token));
+    expect(parseMintToInstruction(fund.ix).data.amount).toBe(BigInt(1_500_000_000));
     for (const [index, payout] of payouts.entries()) {
       const pay = parseTransferCheckedInstruction(parts[index * 2].ix);
       const burn = parseBurnCheckedInstruction(parts[index * 2 + 1].ix);
@@ -150,7 +169,7 @@ describe("settleHeiShares refuses before paying anyone", () => {
     const token = await testDollar();
     const account1 = await tokenAccount(owner1.address, heiMint.address);
     const account2 = await tokenAccount(owner2.address, heiMint.address);
-    const input = { homeowner, issuer, heiMint: heiMint.address, token, payoutMicroUsd: BigInt(3_000_000), tokenSupply: BigInt(3_000), memo: "test" };
+    const input = { homeowner, issuer, heiMint: heiMint.address, token, payoutMicroUsd: BigInt(3_000_000), tokenSupply: BigInt(3_000), memo: "test", fundHomeowner: false };
     return { homeowner, token, account1, account2, owner1, owner2, input };
   }
 
@@ -158,6 +177,13 @@ describe("settleHeiShares refuses before paying anyone", () => {
     const { account1, account2, owner1, owner2, input } = await setup();
     const { rpc, attempts } = fakeRpc({ [account1]: { owner: owner1.address, amount: BigInt(1_000) }, [account2]: { owner: owner2.address, amount: BigInt(2_000) } }, BigInt(3_000));
     await expect(settleHeiShares(rpc, { ...input, register: [account1] })).rejects.toThrow(/some holder is missing, so nobody was paid/);
+    expect(attempts).toEqual([]);
+  });
+
+  it("when every share is already burned, so an old case cannot settle again", async () => {
+    const { account1, owner1, input } = await setup();
+    const { rpc, attempts } = fakeRpc({ [account1]: { owner: owner1.address, amount: BigInt(0) } }, BigInt(0));
+    await expect(settleHeiShares(rpc, { ...input, register: [account1] })).rejects.toThrow(/already settled on-chain/);
     expect(attempts).toEqual([]);
   });
 
@@ -192,14 +218,4 @@ describe("a sale that is run again after an interruption", () => {
     expect(sharesToBuy(BigInt(150_000), BigInt(40_000))).toBe(BigInt(110_000));
   });
 
-  it("finds the earlier closing payment of this HEI by its memo, and only a successful one", async () => {
-    const [mint, other] = await signers(2);
-    const entries = [
-      { signature: "failed", memo: `[57] ${closingMemo(mint.address)}`, err: { InstructionError: [0, "Custom"] } },
-      { signature: "other-hei", memo: `[57] ${closingMemo(other.address)}`, err: null },
-      { signature: "paid", memo: `[57] ${closingMemo(mint.address)}`, err: null },
-    ];
-    expect(findClosing(entries, mint.address)).toBe("paid");
-    expect(findClosing(entries.slice(0, 2), mint.address)).toBeNull();
-  });
 });

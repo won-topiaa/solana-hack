@@ -6,8 +6,8 @@ export type PhotoForUpload = { mimeType: string; dataBase64: string; name: strin
 
 const MAX_SIDE = 1600;
 const QUALITY = 0.85;
-/** Sent unchanged when the browser cannot decode it (HEIC in most browsers). */
-const MAX_UNCHANGED_BYTES = 3 * 1024 * 1024;
+/** Sent unchanged when the browser cannot decode it (HEIC in most browsers); the server accepts up to 2.5 MB. */
+const MAX_UNCHANGED_BYTES = 2.5 * 1024 * 1024;
 const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"];
 
 function toBase64(buffer: ArrayBuffer): string {

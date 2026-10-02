@@ -10,7 +10,7 @@ import { createDemoPropertySource } from "../integrations/rentcast";
 import type { WatchVision } from "../integrations/vision";
 import { testRegistry } from "../params/test-fixtures";
 import { openCase, sealCase } from "./caseToken";
-import { BadRequest, CASE_LIMITS, postApproval, postMessage, runHeiSale, runHeiSettlement, startCase, type WebDeps } from "./handlers";
+import { BadRequest, CASE_LIMITS, postApproval, postMessage, runHeiSale, runHeiSettlement, startCase, WEB_PHOTO_BYTES, type WebDeps } from "./handlers";
 
 const secret = "web-test-secret-that-is-long-enough-12345";
 const now = () => new Date("2026-10-01T15:00:00Z");
@@ -154,5 +154,14 @@ describe("demo limits per case", () => {
     const full: CaseFile = { ...base, photos: Object.fromEntries(Array.from({ length: CASE_LIMITS.photos }, (_, i) => [`photo-${i + 1}`, photo])) };
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
     await expect(postMessage(deps, { token: sealCase(full, secret), text: "", photo: { mimeType: "image/png", dataBase64: png } })).rejects.toThrow(/limit of 6 photos/);
+  });
+
+  it("refuse a new photo while unread photos would make the case too heavy to send", async () => {
+    const deps = depsWith([]);
+    const base = openCase(startCase(deps, { persona: "A" }).token, secret);
+    const unread = { mimeType: "image/png", dataBase64: "A".repeat(Math.ceil((WEB_PHOTO_BYTES * 4) / 3)), sha256: "a".repeat(64), addedAt: now().toISOString() };
+    const heavy: CaseFile = { ...base, photos: { "photo-1": unread } };
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+    await expect(postMessage(deps, { token: sealCase(heavy, secret), text: "", photo: { mimeType: "image/png", dataBase64: png } })).rejects.toThrow(/read the photos you already sent/);
   });
 });

@@ -175,6 +175,43 @@ describe("changes after the documents are prepared", () => {
     expect(String(chain.calls[0].input)).toContain(file.handoff?.receipt.recommendationHash ?? "missing");
   });
 
+  it("refuses the vault token when the watch's serial changed after the documents", async () => {
+    const chain = createFakeChain();
+    const llm = createScriptedLlm([
+      callTool("compare_paths"),
+      say("ok"),
+      callTool("prepare_documents", { optionId: "w-vault-token-watch-1" }),
+      say("ok"),
+      callTool("record_watch", { assetId: "watch-1", serial: "NEW 123-456" }),
+      say("Saved."),
+      callTool("record_receipt_onchain"),
+      say("Prepare again first."),
+    ]);
+    const deps = { llm, tools: toolsWith(chain), now };
+    const base = personaCase("A", now());
+    const checked = { ...base, assets: base.assets.map((asset) => (asset.kind === "watch" ? { ...asset, theftCheck: "simulated_clear" as const } : asset)) };
+    let file = (await sendUserMessage(checked, "c", deps)).caseFile;
+    file = (await sendUserMessage(file, "tokenize", deps)).caseFile;
+    file = (await sendUserMessage(file, "The serial is NEW 123-456.", deps)).caseFile;
+    // The new serial resets the theft check; the values the comparison used did not change.
+    expect(file.assets.find((asset) => asset.id === "watch-1")).toMatchObject({ theftCheck: "not_checked" });
+    const turn = await turnApproving(file, "record", deps);
+    expect(chain.calls).toEqual([]);
+    expect(turn.caseFile.handoff?.onchain?.receipt).toBeUndefined();
+    expect(JSON.stringify(llm.requests.at(-1)?.messages.at(-1))).toContain("changed after the documents were prepared");
+  });
+
+  it("names the prepared path in the approval request", async () => {
+    const llm = createScriptedLlm([callTool("compare_paths"), say("ok"), callTool("prepare_documents"), say("ok"), callTool("record_receipt_onchain")]);
+    const deps = { llm, tools: toolsWith(createFakeChain()), now };
+    let file = (await sendUserMessage(personaCase("B", now()), "c", deps)).caseFile;
+    file = (await sendUserMessage(file, "p", deps)).caseFile;
+    const asked = await sendUserMessage(file, "record", deps);
+    const label = file.recommendation?.options.find((option) => option.id === "re-hei")?.label ?? "missing";
+    expect(asked.awaitingApproval?.summary).toContain(`"${label}"`);
+    expect(asked.awaitingApproval?.summary).toContain("final for this case");
+  });
+
   it("keeps the chosen path fixed once the receipt is on-chain", async () => {
     const chain = createFakeChain();
     const llm = createScriptedLlm([
