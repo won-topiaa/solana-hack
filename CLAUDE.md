@@ -69,7 +69,9 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | LLM provider | **Google Gemini API** (decided 2026-10-01), SDK `@google/genai`, default model `gemini-3.8-flash` (function calling + image input), key `GEMINI_API_KEY` in `.env.local` |
 | HEI on-chain (M8) | Owner, 2026-10-02: payments in our own devnet test dollar "DUSD" (6 decimals like USDC, no value; Circle's devnet faucet gives 20 USDC per 2 hours); the partner pays the homeowner at closing, then sells the shares; at settlement the issuer, as Token-2022 permanent delegate, burns each holder's tokens in the same transaction as that holder's payment; HEI supply fixed after minting, token metadata locked (no update or pointer authority); freeze authority kept for KYC |
 | Watch price data source | **TBD** (no API verified yet; MVP uses a manual price table with source + date) |
-| Hosting / OSS license | **TBD** |
+| Hosting | **Vercel** (owner, 2026-10-02): Hobby functions run up to 300 s (https://vercel.com/docs/functions/configuring-functions/duration), enough for devnet confirmations; secrets in Vercel environment variables |
+| Web UI | Owner, 2026-10-02: one page with the chat (photos, approval cards) and a case panel that fills step by step (goal, assets, comparison, term sheet, hashes, on-chain links); HEI sale and settlement on a separate partner/investor page. Signing: server-side devnet demo wallets approved by UI buttons first; Phantom later if time allows |
+| OSS license | **TBD** (decide with the README, M10) |
 
 ---
 
@@ -108,13 +110,14 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 ## 7. Folder structure (proposed)
 
 ```
-/app                      Next.js App Router (landing chat, /case/[id], /token/[mint], /settle/[id])
-/components               Chat, CameraCapture, PathTable, TermSheet, PassportView, ReceiptBadge, SimulatedTag
-/lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, photos.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), types.ts
+/app                      Next.js App Router: page.tsx (agent: chat + case panel), partner/page.tsx (closing, sale, settlement), icon.svg, api/case (start), api/case/message, api/case/approval, api/hei/sale, api/hei/settlement (route handlers, maxDuration 300)
+/components               AgentApp, ChatPanel, CasePanel, PartnerConsole, AppHeader, ui (Section, SimulatedTag, DevnetTag, Hash), caseStore.ts (sealed token + view in sessionStorage), photoUpload.ts (resize to JPEG before upload)
+/lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, photos.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), services.ts (real services from env, shared by CLI and web), types.ts
+/lib/web                  caseToken.ts (case sealed with AES-256-GCM under CASE_SECRET; the server keeps no case), view.ts (what the browser shows, formatted by code, no PII), handlers.ts (start, message, approval, HEI sale, settlement), server.ts (server-only: services once per process, JSON answers)
 /lib/calc                 hei.ts, settlement.ts, sale.ts (micro-dollars, purchase cost, settlement split), compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
 /lib/recommend            recommend.ts (paths + rules + freshness gate), realEstate.ts, watches.ts, display.ts, termSheet.ts, passport.ts (passport + receipt), canonical.ts, personas.ts
-/lib/chain                adapter.ts (ChainService), devnet.ts, solana.ts (kit + program clients, mints), payment.ts (test dollar), heiSale.ts, heiSettlement.ts, wallets.ts (.wallets/devnet, git-ignored), fake.ts (tests)
+/lib/chain                adapter.ts (ChainService), devnet.ts, solana.ts (kit + program clients, mints), payment.ts (test dollar), heiSale.ts, heiSettlement.ts, heiLifecycle.ts (KYC, closing, sale, settlement as records; used by the script and the web), wallets.ts (.wallets/devnet, git-ignored), fake.ts (tests)
 /lib/integrations         rentcast.ts (live + demo source + cache), rentcastCache.ts (disk cache), plaid.ts (Liabilities, sandbox; approval-gated tool), vision.ts (Gemini image + JSON output), watchRegister.mock.ts (simulated, approval-gated)
 /lib/assets               types.ts (assets, PII items, photos), ownerMatch.ts, serial.ts (salted serial hash), watchPrices.ts
 /lib/format.ts            display formatting (formatUsd): tools return finished text, the model quotes it
@@ -272,7 +275,9 @@ type Receipt = { recommendedOptionId: string | null; selectedOptionId: string; r
 | M6 | Comparison + recommendation + term sheet + Asset Passport + receipt hash (off-chain) | demo persona gets the expected recommendation and rules |
 | M7 | Solana devnet: receipt on-chain; HEI share mint (Token-2022: frozen-by-default accounts, KYC allowlist); watch 1-of-1 token after simulated vault intake | tx ids visible and verifiable in an explorer |
 | M8 | Primary sale (devnet USDC or test token) + settlement script (capped payout, distribute, burn) | settlement of a demo case pays holders correctly |
-| M9 | Polish: 3 demo personas, English README, demo + pitch videos, submission checklist | checklist complete |
+| M9 | Web UI (owner, 2026-10-02: the old M9 is split into M9–M11): chat + case panel, photo upload, approval cards, comparison table, term sheet, documents, on-chain links; partner/investor page for the HEI sale and settlement; demo personas as quick starts | a demo persona goes from goal to on-chain steps in the browser |
+| M10 | Deploy on Vercel (secrets as environment variables), English README, OSS license, final name | the deployed URL runs a demo persona |
+| M11 | Demo + pitch videos, submission checklist, Arena submission | checklist complete |
 
 ---
 
@@ -282,7 +287,7 @@ Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vit
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies from `package-lock.json` |
-| `npm run dev` | Dev server at http://localhost:3000 (Turbopack) |
+| `npm run dev` | The web app at http://localhost:3000 (Turbopack): agent page and /partner. Needs `GEMINI_API_KEY` and `CASE_SECRET` in `.env.local`; on-chain steps use the devnet wallets in `.wallets/devnet` |
 | `npm test` | Unit tests once (Vitest); §8.5 test vectors live in `lib/calc/*.test.ts` |
 | `npm run test:watch` | Unit tests in watch mode |
 | `npm run params:check` | Freshness of every registry value today (or `-- YYYY-MM-DD`) |

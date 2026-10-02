@@ -7,51 +7,22 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { createGeminiClient, DEFAULT_GEMINI_MODEL } from "../lib/agent/gemini";
-import { createCaseFile, resolveApproval, sendUserMessage, type AgentDeps, type TurnResult } from "../lib/agent/orchestrator";
+import { createCaseFile, resolveApproval, sendUserMessage, type TurnResult } from "../lib/agent/orchestrator";
 import { addPhoto, mimeTypeFromFileName } from "../lib/agent/photos";
-import { createAgentTools } from "../lib/agent/tools";
-import { createGeminiVision } from "../lib/integrations/vision";
-import { getRegistry } from "../lib/params/load";
-import { createDevnetChain } from "../lib/chain/devnet";
-import { createDevnetRpc } from "../lib/chain/solana";
-import { loadOrCreateWallet } from "../lib/chain/wallets";
-import { createDemoPropertySource, createMemoryStore, createRentcastSource, withCache } from "../lib/integrations/rentcast";
-import { createFileStore } from "../lib/integrations/rentcastCache";
-import { createPlaidSandboxSource } from "../lib/integrations/plaid";
+import { createAgentServices } from "../lib/agent/services";
 
 async function main() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("GEMINI_API_KEY is not set. Add it to .env.local (see .env.example).");
+  let services;
+  try {
+    services = await createAgentServices();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
-  const model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
-  // Real RentCast data when a key is set, unless PROPERTY_DATA_SOURCE=demo (for demo recordings).
-  const rentcastKey = process.env.RENTCAST_API_KEY;
-  const useRentcast = Boolean(rentcastKey) && process.env.PROPERTY_DATA_SOURCE !== "demo";
-  const propertySource = useRentcast
-    ? withCache(createRentcastSource(rentcastKey as string), createFileStore())
-    : withCache(createDemoPropertySource(), createMemoryStore());
-  // Plaid (sandbox test data) is offered only when both Plaid values are set.
-  const { PLAID_CLIENT_ID: clientId, PLAID_SECRET: secret } = process.env;
-  const mortgageSource = clientId && secret ? createPlaidSandboxSource({ clientId, secret }) : undefined;
-  const deps: AgentDeps = {
-    llm: createGeminiClient({ apiKey, model }),
-    tools: createAgentTools({
-      registry: getRegistry(),
-      propertySource,
-      mortgageSource,
-      vision: createGeminiVision({ apiKey, model }),
-      // Devnet only. The wallets live in the git-ignored .wallets/devnet (npm run chain:wallets).
-      chain: createDevnetChain(createDevnetRpc(process.env.SOLANA_RPC_URL || undefined), {
-        issuer: await loadOrCreateWallet("issuer"),
-        user: await loadOrCreateWallet("user"),
-      }),
-    }),
-  };
-  console.log(`Model: ${model}. Property data: ${useRentcast ? "RentCast (cached in .cache/rentcast)" : "demo data (data/demo/properties.json)"}.`);
-  console.log(`Mortgage: typed by the user${mortgageSource ? ", or Plaid sandbox (test data) after approval" : ""}.`);
+  const deps = services.agent;
+  const { model, propertyData, plaid } = services.info;
+  console.log(`Model: ${model}. Property data: ${propertyData === "rentcast" ? "RentCast (cached in .cache/rentcast)" : "demo data (data/demo/properties.json)"}.`);
+  console.log(`Mortgage: typed by the user${plaid ? ", or Plaid sandbox (test data) after approval" : ""}.`);
   console.log("Watch photos: type /photo followed by a file path (PNG, JPEG, WEBP, HEIC).");
   console.log("On-chain steps: Solana devnet only, each after your approval.");
   console.log("Development chat: use made-up personas for demos.\n");

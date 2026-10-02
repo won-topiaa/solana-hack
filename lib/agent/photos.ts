@@ -32,6 +32,22 @@ export function addPhoto(
   return { caseFile: { ...caseFile, photos: { ...caseFile.photos, [photoId]: stored } }, photoId };
 }
 
+/**
+ * Drops the image bytes of photos that a watch was already read from. The web app
+ * carries the case in every request, so read photos would only make it heavy; the
+ * sha256 stays (the asset passport uses it as evidence).
+ */
+export function dropReadPhotoBytes(caseFile: CaseFile): CaseFile {
+  const read = new Set(caseFile.assets.flatMap((asset) => (asset.kind === "watch" ? asset.photoIds : [])));
+  const photos = Object.fromEntries(
+    Object.entries(caseFile.photos).map(([id, photo]) => {
+      const kept = read.has(id) ? { mimeType: photo.mimeType, sha256: photo.sha256, addedAt: photo.addedAt } : photo;
+      return [id, kept];
+    }),
+  );
+  return { ...caseFile, photos };
+}
+
 /** Picks the photo type from a file name, for the terminal chat's /photo command. */
 export function mimeTypeFromFileName(fileName: string): string {
   const extension = fileName.toLowerCase().split(".").pop() ?? "";

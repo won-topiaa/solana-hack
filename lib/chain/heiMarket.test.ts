@@ -19,6 +19,7 @@ import {
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
 import { describe, expect, it } from "vitest";
+import { allocation } from "./heiLifecycle";
 import { purchaseInstructions } from "./heiSale";
 import { HOLDERS_PER_TRANSACTION, payoutsFor, settleHeiShares, settlementInstructions, type ShareHolding } from "./heiSettlement";
 import { paymentAccount, type PaymentToken } from "./payment";
@@ -169,5 +170,17 @@ describe("settleHeiShares refuses before paying anyone", () => {
     );
     await expect(settleHeiShares(rpc, { ...input, register: [account1] })).rejects.toThrow(/needs 3000000/);
     expect(attempts).toEqual([]);
+  });
+});
+
+describe("allocation of the primary sale", () => {
+  it("gives the first investor 150,000 shares and the second the rest", () => {
+    expect(allocation(BigInt(234_131), 2)).toEqual([BigInt(150_000), BigInt(84_131)]);
+  });
+
+  it("gives everything to one investor, or to the first when the supply is small", () => {
+    expect(allocation(BigInt(234_131), 1)).toEqual([BigInt(234_131)]);
+    expect(allocation(BigInt(90_000), 2)).toEqual([BigInt(90_000), BigInt(0)]);
+    expect(() => allocation(BigInt(1), 0)).toThrow(RangeError);
   });
 });

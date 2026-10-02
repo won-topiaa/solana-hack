@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysBetween, isIsoDate, todayInNewYork } from "./dates";
+import { addDays, daysBetween, isIsoDate, todayInNewYork } from "./dates";
 
 describe("isIsoDate", () => {
   it("accepts real calendar dates", () => {
@@ -36,5 +36,14 @@ describe("todayInNewYork", () => {
 
   it("moves to the next day at midnight Eastern", () => {
     expect(todayInNewYork(new Date("2026-10-02T04:00:00Z"))).toBe("2026-10-02");
+  });
+});
+
+describe("addDays", () => {
+  it("moves across month and year ends, and back", () => {
+    expect(addDays("2026-10-01", 1)).toBe("2026-10-02");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(daysBetween("2026-10-01", addDays("2026-10-01", 45))).toBe(45);
   });
 });

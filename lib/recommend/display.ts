@@ -5,12 +5,12 @@ import { formatUsd } from "../format";
 import { pct } from "./realEstate";
 import type { PathOption, Recommendation } from "./types";
 
-function cashText(option: PathOption): string {
+export function cashText(option: PathOption): string {
   const range = option.cashRangeUsd;
   return range ? `${formatUsd(range.low)} to ${formatUsd(range.high)}` : formatUsd(option.cashNowUsd);
 }
 
-function costText(option: PathOption, years: number): string {
+export function costText(option: PathOption, years: number): string {
   if (option.scenarios) {
     return option.scenarios
       .map(

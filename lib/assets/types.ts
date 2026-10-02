@@ -44,4 +44,5 @@ export type PiiItem =
   | { kind: "serial"; value: string; salt: string };
 
 /** A photo the user uploaded. It may show a serial number, so it stays off-chain with the case. */
-export type Photo = { mimeType: string; dataBase64: string; sha256: string; addedAt: string };
+/** dataBase64 is dropped once the photo is read, to keep the case small; sha256 stays as evidence. */
+export type Photo = { mimeType: string; dataBase64?: string; sha256: string; addedAt: string };

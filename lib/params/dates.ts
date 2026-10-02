@@ -23,6 +23,11 @@ export function daysBetween(fromDate: string, toDate: string): number {
   return Math.round((toUtcMidnight(toDate) - toUtcMidnight(fromDate)) / MS_PER_DAY);
 }
 
+/** The date `days` calendar days after `isoDate` (before it when negative). */
+export function addDays(isoDate: string, days: number): string {
+  return new Date(toUtcMidnight(isoDate) + days * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
 /**
  * Today's date in US Eastern time. The market sources (Freddie Mac, FRED)
  * publish on Eastern-time schedules, so "today" is counted the same way.

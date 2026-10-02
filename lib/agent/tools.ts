@@ -339,7 +339,11 @@ export function createReadWatchPhotos(vision: WatchVision): AgentTool {
         const uploaded = Object.keys(caseFile.photos).join(", ") || "none";
         return { output: { saved: false, problem: `Unknown photo ids. Uploaded photos: ${uploaded}.` }, caseFile };
       }
-      const reading = await vision.read(ids.map((id) => caseFile.photos[id]));
+      const unreadable = ids.filter((id) => caseFile.photos[id].dataBase64 === undefined);
+      if (unreadable.length > 0) {
+        return { output: { saved: false, problem: `Already read and no longer kept: ${unreadable.join(", ")}. Ask the user to upload the photo again.` }, caseFile };
+      }
+      const reading = await vision.read(ids.map((id) => ({ mimeType: caseFile.photos[id].mimeType, dataBase64: caseFile.photos[id].dataBase64 ?? "" })));
 
       let file = caseFile;
       let serialRef: string | undefined;

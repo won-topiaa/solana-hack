@@ -83,7 +83,7 @@ const CONNECT_OPTION = `
   asks for their approval first). Offer both ways.`;
 
 const PHOTO_OPTION = ` ask for clear photos of the dial, the case back or reference engraving, and
-  the box and papers if they have them (in the terminal: /photo followed by a file path).
+  the box and papers if they have them (the app has a button for photos; do not explain how to upload).
   When photos arrive, call read_watch_photos with their ids.`;
 
 /** offeredTools: names of the tools the model gets in this step. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { testRegistry } from "../params/test-fixtures";
 import { describeRecommendation } from "./display";
-import { personaCase } from "./personas";
+import { personaCase, personaCaseOn } from "./personas";
 import { recommend } from "./recommend";
 import type { PathOption, Recommendation } from "./types";
 
@@ -177,5 +177,16 @@ describe("a watch flagged as stolen", () => {
     if (result.status !== "ok") throw new Error(`expected ok, got ${result.status}`);
     expect(result.recommendation.options.filter((item) => item.assetIds.includes("watch-2"))).toEqual([]);
     expect(result.recommendation.options.some((item) => item.assetIds.includes("watch-1"))).toBe(true);
+  });
+});
+
+describe("personas on a later day", () => {
+  it("keep the same days until the cash is needed, and the same recommendation", () => {
+    const later = personaCaseOn("A", now, "2026-10-20");
+    expect(later.goal?.neededBy).toBe("2026-10-21"); // one day ahead, as on the demo date
+    const result = recommend(later, testRegistry(), "2026-10-20", now);
+    if (result.status !== "ok") throw new Error(`expected ok, got ${result.status}`);
+    expect(result.recommendation.chosenId).toBe("watch-plan");
+    expect(result.recommendation.rulesFired).toEqual(["W-3", "W-1"]);
   });
 });

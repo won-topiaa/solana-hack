@@ -6,9 +6,11 @@ import { createCaseFile } from "../agent/orchestrator";
 import type { CaseFile, Intent } from "../agent/types";
 import type { Asset, PiiItem } from "../assets/types";
 import { findWatchPrice } from "../assets/watchPrices";
+import { addDays, daysBetween } from "../params/dates";
 
 export const DEMO_TODAY = data.today;
 export const PERSONA_IDS = data.personas.map((persona) => persona.id);
+export const DEMO_PERSONAS = data.personas.map((persona) => ({ id: persona.id, title: persona.title }));
 
 export function personaCase(id: string, now: Date): CaseFile {
   const persona = data.personas.find((item) => item.id === id);
@@ -54,4 +56,15 @@ export function personaCase(id: string, now: Date): CaseFile {
     assets,
     pii,
   };
+}
+
+/**
+ * A persona as of `today` instead of the fixed demo date: the cash is still needed
+ * the same number of days ahead, so a demo run later behaves the same.
+ */
+export function personaCaseOn(id: string, now: Date, today: string): CaseFile {
+  const caseFile = personaCase(id, now);
+  if (!caseFile.goal) return caseFile;
+  const shift = daysBetween(DEMO_TODAY, today);
+  return { ...caseFile, goal: { ...caseFile.goal, neededBy: addDays(caseFile.goal.neededBy, shift) } };
 }

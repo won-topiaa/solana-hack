@@ -3,6 +3,7 @@
 
 import type { Asset, Photo, PiiItem } from "../assets/types";
 import type { OnchainRecord } from "../chain/adapter";
+import type { SaleRecord, SettlementRecord } from "../chain/heiLifecycle";
 import type { AssetPassport, Receipt } from "../recommend/passport";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import type { Recommendation } from "../recommend/types";
@@ -71,8 +72,14 @@ export type CaseFile = {
     termSheet?: HeiTermSheet;
     passports: AssetPassport[];
     receipt: Receipt;
-    onchain?: { receipt?: OnchainRecord; heiShares?: OnchainRecord & { treasury: string }; watchToken?: OnchainRecord & { owner: string } };
-  }; // steps 6 (off-chain) and 7 (on-chain, devnet)
+    onchain?: {
+      receipt?: OnchainRecord;
+      heiShares?: OnchainRecord & { treasury: string };
+      watchToken?: OnchainRecord & { owner: string };
+      heiSale?: SaleRecord; // the partner's steps after issuance (simulated partner, devnet)
+      heiSettlement?: SettlementRecord;
+    };
+  }; // steps 6 (off-chain), 7 (on-chain, devnet) and 8 (settlement)
   messages: AgentMessage[];
   pendingApproval: PendingApproval | null;
   events: CaseEvent[];

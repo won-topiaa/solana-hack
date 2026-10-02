@@ -4,7 +4,7 @@ A neutral AI agent for US users who need cash. It compares every way to turn a h
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user
 to the next step (including tokenization on Solana) only after explicit approval.
 
-> Status: in development (milestone M6: in a terminal chat the agent takes the cash goal and the assets, compares every path, recommends one with fixed rules, and prepares the term sheet, asset passports and a hashed recommendation receipt).
+> Status: in development (milestone M9: a web app where the agent takes the cash goal and the assets, compares every path, recommends one with fixed rules, prepares the term sheet, asset passports and a hashed receipt, and after your approval records the receipt and issues tokens on Solana devnet; a partner page runs the HEI sale and settlement with a simulated partner and test dollars).
 >
 > Not investment or financial advice.
 
@@ -14,9 +14,14 @@ Requires Node.js 22.12 or later (the test runner, Vitest 5, needs it).
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in keys only when a milestone needs them
+cp .env.example .env.local   # set GEMINI_API_KEY and CASE_SECRET (openssl rand -base64 48)
+npm run chain:wallets        # devnet demo wallets; the issuer needs devnet SOL (https://faucet.solana.com)
 npm run dev                  # then open http://localhost:3000
 ```
+
+In the browser, load persona B, then use the suggested messages: compare, prepare the documents,
+record the receipt and issue the HEI share tokens (each on-chain step asks for your approval).
+Then open "Partner & investors" to run the closing, the primary sale and a settlement on devnet.
 
 ## Try the agent (terminal)
 
