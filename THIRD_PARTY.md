@@ -5,7 +5,7 @@ with its license. Versions and licenses below are read from the installed packag
 (`node_modules/<name>/package.json`). The full dependency tree, including transitive
 packages, is pinned in `package-lock.json`.
 
-Last updated: 2026-10-02 (milestone M7).
+Last updated: 2026-10-02 (milestone M10: web design).
 
 ## Runtime dependencies
 
@@ -19,6 +19,7 @@ Last updated: 2026-10-02 (milestone M7).
 | @solana-program/token-2022 | 0.19.0 | Apache-2.0 | https://github.com/solana-program/token-2022 |
 | @solana-program/system | 0.15.0 | Apache-2.0 | https://github.com/solana-program/system |
 | @solana-program/memo | 0.15.0 | Apache-2.0 | https://github.com/solana-program/memo |
+| lucide-react | 1.50.0 | ISC | https://github.com/lucide-icons/lucide |
 
 ## Development dependencies
 
@@ -39,7 +40,8 @@ Last updated: 2026-10-02 (milestone M7).
 
 | Font | License | Source | How it is used |
 |---|---|---|---|
-| Geist, Geist Mono | SIL Open Font License 1.1 (`OFL.txt`) | https://github.com/vercel/geist-font | Loaded with `next/font/google` and self-hosted at build time |
+| Inter | SIL Open Font License 1.1 | https://github.com/rsms/inter | The UI font. Loaded with `next/font/google` and self-hosted at build time |
+| Geist Mono | SIL Open Font License 1.1 (`OFL.txt`) | https://github.com/vercel/geist-font | Monospaced text (hashes, ids). Loaded with `next/font/google` and self-hosted at build time |
 
 ## Generated files
 
