@@ -203,9 +203,10 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
   }
   if (!chosen && !(intent === "unsure" && homeChoice && watchChoice)) reasons.push("No path reaches the goal with the choices made so far.");
 
-  // M2 gate: every registry value behind these numbers must be fresh.
+  // M2 gate: every registry value behind these numbers must be fresh (on the freeze date
+  // when the registry is frozen for the judging period).
   const usedKeys = [...new Set([...options.flatMap((option) => option.usedParamKeys), ...RULE_KEYS])];
-  const freshness = checkParamsFresh(registry, usedKeys, today);
+  const freshness = checkParamsFresh(registry, usedKeys, registry.frozenOn ?? today);
   if (!freshness.ok) return { status: "needs_fresh_data", registryVersion: freshness.registryVersion, stale: freshness.stale };
 
   return {
@@ -219,6 +220,7 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
       reasons,
       inputs: { goal, assets: summarize(home, watches), horizonYears: years, today },
       registryVersion: registry.registry_version,
+      ...(registry.frozenOn ? { valuesFrozenOn: registry.frozenOn } : {}),
       createdAt: now.toISOString(),
     },
   };

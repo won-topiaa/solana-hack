@@ -103,6 +103,17 @@ export async function getSolBalance(rpc: DevnetRpc, owner: Address): Promise<num
   return Number(value) / 1e9;
 }
 
+/** Below this the demo pauses on-chain steps instead of failing half-way (a full HEI flow uses about 0.03 SOL). */
+export const MIN_ISSUER_SOL = 0.2;
+
+/** Stops before an on-chain step when the paying wallet is too low to finish it. */
+export async function requireFunds(rpc: DevnetRpc, payer: Address, minSol: number = MIN_ISSUER_SOL): Promise<void> {
+  const balance = await getSolBalance(rpc, payer);
+  if (balance < minSol) {
+    throw new Error(`The demo's devnet wallet is low on test SOL (${balance.toFixed(3)} SOL); on-chain steps are paused until it is refilled`);
+  }
+}
+
 /** Free devnet SOL for fees (devnet faucet; it may refuse when busy). */
 export async function requestDevnetSol(rpc: DevnetRpc, to: Address, sol: number): Promise<Signature> {
   const signature = await rpc.requestAirdrop(to, lamports(BigInt(Math.round(sol * 1e9)))).send();

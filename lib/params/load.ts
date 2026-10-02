@@ -62,6 +62,17 @@ export function formatRegistry(registry: Registry): string {
   return `${JSON.stringify(registry, null, 2)}\n`;
 }
 
+/**
+ * The registry frozen on a date (owner decision 2026-10-02, judging period): values are
+ * checked for freshness on `frozenOn` instead of today, and every recommendation records
+ * the date, so the page can say the values are as of that day. Never a date after today.
+ */
+export function freezeRegistry(registry: Registry, frozenOn: string, today: string): Registry {
+  if (!isIsoDate(frozenOn)) throw new Error(`REGISTRY_FROZEN_ON must be a YYYY-MM-DD date, got "${frozenOn}"`);
+  if (frozenOn > today) throw new Error(`REGISTRY_FROZEN_ON (${frozenOn}) is after today (${today})`);
+  return { ...registry, frozenOn };
+}
+
 let cached: Registry | undefined;
 
 /** The registry bundled with the app (data/params.json at build time). */

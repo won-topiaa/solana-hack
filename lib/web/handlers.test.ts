@@ -10,7 +10,7 @@ import { createDemoPropertySource } from "../integrations/rentcast";
 import type { WatchVision } from "../integrations/vision";
 import { testRegistry } from "../params/test-fixtures";
 import { openCase, sealCase } from "./caseToken";
-import { BadRequest, postApproval, postMessage, runHeiSale, runHeiSettlement, startCase, type WebDeps } from "./handlers";
+import { BadRequest, CASE_LIMITS, postApproval, postMessage, runHeiSale, runHeiSettlement, startCase, type WebDeps } from "./handlers";
 
 const secret = "web-test-secret-that-is-long-enough-12345";
 const now = () => new Date("2026-10-01T15:00:00Z");
@@ -140,5 +140,19 @@ describe("partner steps", () => {
     const settled = issuedCase({ heiSale: { purchases: [] } as unknown as SaleRecord, heiSettlement: {} as SettlementRecord });
     await expect(runHeiSettlement(deps, { token: settled, years: 2, growth: 0 })).rejects.toThrow(/already settled/);
     await expect(runHeiSale(deps, { token: sold })).rejects.toThrow(/already ran/);
+  });
+});
+
+describe("demo limits per case", () => {
+  it("stop a case after its message and photo limits, without calling the model", async () => {
+    const deps = depsWith([]); // any model call would fail: no scripted replies left
+    const base = openCase(startCase(deps, { persona: "A" }).token, secret);
+    const busy: CaseFile = { ...base, messages: Array.from({ length: CASE_LIMITS.messages }, () => ({ role: "user" as const, text: "hi" })) };
+    await expect(postMessage(deps, { token: sealCase(busy, secret), text: "one more" })).rejects.toThrow(/limit of 40 messages/);
+
+    const photo = { mimeType: "image/png", dataBase64: "", sha256: "a".repeat(64), addedAt: now().toISOString() };
+    const full: CaseFile = { ...base, photos: Object.fromEntries(Array.from({ length: CASE_LIMITS.photos }, (_, i) => [`photo-${i + 1}`, photo])) };
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
+    await expect(postMessage(deps, { token: sealCase(full, secret), text: "", photo: { mimeType: "image/png", dataBase64: png } })).rejects.toThrow(/limit of 6 photos/);
   });
 });

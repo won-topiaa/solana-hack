@@ -27,6 +27,11 @@ export function costText(option: PathOption, years: number): string {
   return `about ${formatUsd(option.totalCostUsd)} over ${years} years`;
 }
 
+/** Said wherever a recommendation rests on a frozen registry (judging period). */
+export function frozenNote(frozenOn: string): string {
+  return `Values are frozen as of ${frozenOn} for the judging period. Normally a value older than its validity window stops the recommendation until it is updated.`;
+}
+
 export function describeOption(option: PathOption, years: number): string {
   if (option.informational && option.cashNowUsd === 0) {
     return `${option.label}: ${option.risks.join(" ")} (id: ${option.id})`;
@@ -64,6 +69,7 @@ export function describeRecommendation(recommendation: Recommendation): string[]
   if (chosen) lines.push(`Main risks: ${chosen.risks.join(" ")}`);
   lines.push(
     `Rules applied: ${recommendation.rulesFired.join(", ") || "none"}. Values from parameter registry ${recommendation.registryVersion}.`,
+    ...(recommendation.valuesFrozenOn ? [frozenNote(recommendation.valuesFrozenOn)] : []),
     "This is not investment or financial advice.",
   );
   return lines;

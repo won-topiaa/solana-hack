@@ -12,7 +12,7 @@ import type { HeiTermSheet } from "../recommend/termSheet";
 import { buyShares, payAtClosing } from "./heiSale";
 import { settleHeiShares } from "./heiSettlement";
 import { loadOrCreateTestDollar, mintTestDollars, paymentBalance } from "./payment";
-import { allowlistInvestor, openFrozenAccount, readSupply, readTokenAccount, transactionLogs, type DevnetRpc } from "./solana";
+import { allowlistInvestor, openFrozenAccount, readSupply, readTokenAccount, requireFunds, transactionLogs, type DevnetRpc } from "./solana";
 
 /** What the sale and the settlement need from the term sheet. */
 export type HeiDeal = Pick<
@@ -85,6 +85,7 @@ export async function runPrimarySale(
   const treasury = address(input.treasury);
   const price = tokenPriceMicroUsd(input.deal.tokenPriceUsd);
   const supply = BigInt(input.deal.tokenSupply);
+  await requireFunds(rpc, issuer.address);
   if ((await readTokenAccount(rpc, treasury))?.amount !== String(supply)) {
     throw new Error("The treasury does not hold the whole supply: the sale already ran or the shares were not issued");
   }
@@ -160,6 +161,7 @@ export async function runSettlement(
   const { deal, years, growth } = input;
   if (!(years > 0 && years <= deal.termYears)) throw new RangeError(`Settle after more than 0 and at most ${deal.termYears} years`);
   const heiMint = address(input.heiMint);
+  await requireFunds(rpc, issuer.address);
   const token = await loadOrCreateTestDollar(rpc, issuer);
   if (token.mint !== input.sale.paymentMint) throw new Error("The test dollar changed since the sale");
 

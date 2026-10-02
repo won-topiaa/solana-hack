@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { freezeRegistry } from "../params/load";
 import { testRegistry } from "../params/test-fixtures";
 import { describeRecommendation } from "./display";
 import { personaCase, personaCaseOn } from "./personas";
@@ -188,5 +189,25 @@ describe("personas on a later day", () => {
     if (result.status !== "ok") throw new Error(`expected ok, got ${result.status}`);
     expect(result.recommendation.chosenId).toBe("watch-plan");
     expect(result.recommendation.rulesFired).toEqual(["W-3", "W-1"]);
+  });
+});
+
+describe("a registry frozen for the judging period", () => {
+  const later = "2026-12-01"; // every market value is long past its validity window
+  it("checks freshness on the freeze date and records it", () => {
+    const frozen = freezeRegistry(testRegistry(), TODAY, later);
+    const result = recommend(personaCaseOn("B", now, later), frozen, later, now);
+    if (result.status !== "ok") throw new Error(`expected ok, got ${result.status}`);
+    expect(result.recommendation.valuesFrozenOn).toBe(TODAY);
+    expect(describeRecommendation(result.recommendation).join(" ")).toContain(`Values are frozen as of ${TODAY} for the judging period`);
+  });
+
+  it("still blocks stale values when the registry is not frozen", () => {
+    expect(recommend(personaCaseOn("B", now, later), testRegistry(), later, now).status).toBe("needs_fresh_data");
+  });
+
+  it("refuses a freeze date after today or not a date", () => {
+    expect(() => freezeRegistry(testRegistry(), "2026-12-02", later)).toThrow(/after today/);
+    expect(() => freezeRegistry(testRegistry(), "12/01/2026", later)).toThrow(/YYYY-MM-DD/);
   });
 });

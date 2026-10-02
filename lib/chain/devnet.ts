@@ -10,6 +10,7 @@ import {
   explorerTxUrl,
   getSolBalance,
   recordReceiptMemo,
+  requireFunds,
   sendDevnetSol,
   type DevnetRpc,
   type TokenInfo,
@@ -57,6 +58,7 @@ export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSign
 
   return {
     async recordReceipt(memo) {
+      await requireFunds(rpc, wallets.issuer.address);
       if ((await getSolBalance(rpc, wallets.user.address)) < USER_FEE_SOL / 2) {
         await sendDevnetSol(rpc, wallets.issuer, wallets.user.address, USER_FEE_SOL);
       }
@@ -65,11 +67,13 @@ export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSign
     },
 
     async issueHeiShares(input: HeiIssueInput) {
+      await requireFunds(rpc, wallets.issuer.address);
       const created = await createHeiShareMint(rpc, wallets.issuer, input.tokenSupply, heiTokenInfo(input));
       return { ...record(created.signatures, created.mint), treasury: created.treasury };
     },
 
     async issueWatchToken(input: WatchIssueInput) {
+      await requireFunds(rpc, wallets.issuer.address);
       const created = await createWatchToken(rpc, wallets.issuer, wallets.user.address, watchTokenInfo(input));
       return { ...record(created.signatures, created.mint), owner: wallets.user.address };
     },

@@ -9,7 +9,7 @@ import { explorerAddressUrl, explorerTxUrl } from "../chain/solana";
 import { formatMicroUsd, formatPercent, formatUsd } from "../format";
 import type { Registry } from "../params/types";
 import { hashOf } from "../recommend/canonical";
-import { cashText, costText } from "../recommend/display";
+import { cashText, costText, frozenNote } from "../recommend/display";
 import { DEMO_PERSONAS } from "../recommend/personas";
 import { watchLabel } from "../recommend/recommend";
 import { describeTermSheet } from "../recommend/termSheet";
@@ -43,6 +43,7 @@ export type CaseView = {
     reasons: string[];
     risks: string[];
     rules: string;
+    frozenNote: string | null; // the registry is frozen for the judging period
     sources: { label: string; value: string; source: string; asOf: string }[];
     notice: string;
   } | null;
@@ -181,6 +182,7 @@ function comparisonOf(caseFile: CaseFile, registry: Registry): CaseView["compari
     reasons: rec.reasons,
     risks: chosen?.risks ?? [],
     rules: `Rules applied: ${rec.rulesFired.join(", ") || "none"}. Values from parameter registry ${rec.registryVersion}.`,
+    frozenNote: rec.valuesFrozenOn ? frozenNote(rec.valuesFrozenOn) : null,
     sources: sourcesOf(rec.options.flatMap((option) => option.usedParamKeys), registry),
     notice: NOT_ADVICE,
   };

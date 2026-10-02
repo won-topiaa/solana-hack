@@ -54,6 +54,11 @@ function Comparison({ comparison }: { comparison: NonNullable<CaseView["comparis
           </p>
         )}
         <p className="text-xs text-zinc-500">{comparison.rules}</p>
+        {comparison.frozenNote && (
+          <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            {comparison.frozenNote}
+          </p>
+        )}
         {comparison.sources.length > 0 && (
           <details className="text-xs text-zinc-500">
             <summary className="cursor-pointer">Values and sources behind these numbers</summary>

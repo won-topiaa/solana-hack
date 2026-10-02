@@ -21,4 +21,7 @@ export type Registry = {
   changelog: { version: string; note: string }[];
   rules: Record<string, unknown>;
   params: Record<string, ParamEntry>;
+  // Not in params.json: set by freezeRegistry for a deployment that must keep working
+  // after the values age (the judging period). Freshness is then checked on this date.
+  frozenOn?: string;
 };

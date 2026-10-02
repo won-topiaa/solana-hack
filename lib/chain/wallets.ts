@@ -17,8 +17,16 @@ export const WALLET_DIR = ".wallets/devnet";
 /** issuer: plays the partners (HEI issuer, watch vault) on devnet; user: the homeowner or watch owner. */
 export const DEMO_WALLETS = ["issuer", "user", "investor-kyc", "investor-kyc-2", "investor-no-kyc"] as const;
 
-export async function loadOrCreateWallet(name: string, dir: string = WALLET_DIR): Promise<KeyPairSigner> {
+/** The environment variable that can hold a wallet on a server without the files (Vercel). */
+export function walletEnvName(name: string): string {
+  return `DEVNET_WALLET_${name.toUpperCase().replaceAll("-", "_")}`;
+}
+
+export async function loadOrCreateWallet(name: string, dir: string = WALLET_DIR, env: Record<string, string | undefined> = process.env): Promise<KeyPairSigner> {
   if (!/^[a-z0-9-]+$/.test(name)) throw new Error(`Bad wallet name: ${name}`);
+  // First the environment (same 64-number JSON array as the file), then the file, else a new key.
+  const fromEnv = env[walletEnvName(name)];
+  if (fromEnv) return createKeyPairSignerFromBytes(Uint8Array.from(JSON.parse(fromEnv) as number[]));
   const file = join(dir, `${name}.json`);
   if (existsSync(file)) {
     const bytes = Uint8Array.from(JSON.parse(readFileSync(file, "utf8")) as number[]);

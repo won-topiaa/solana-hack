@@ -36,6 +36,8 @@ const TEST_DOLLAR_MINT: MintOptions = { decimals: PAYMENT_DECIMALS, frozenByDefa
 export async function loadOrCreateTestDollar(rpc: DevnetRpc, issuer: KeyPairSigner, dir: string = WALLET_DIR): Promise<PaymentToken> {
   const file = join(dir, "test-dollar.json");
   const token = (mint: Address): PaymentToken => ({ mint, program: TOKEN_2022_PROGRAM_ADDRESS, decimals: PAYMENT_DECIMALS, symbol: TEST_DOLLAR_INFO.symbol });
+  // On a server without the file (Vercel), the mint comes from the environment and is never created there.
+  if (process.env.DEVNET_TEST_DOLLAR_MINT) return token(address(process.env.DEVNET_TEST_DOLLAR_MINT));
   if (existsSync(file)) {
     const saved = address((JSON.parse(readFileSync(file, "utf8")) as { mint: string }).mint);
     // Devnet can be reset; then the saved mint is gone and a new one is made.

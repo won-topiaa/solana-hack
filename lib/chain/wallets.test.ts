@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { receiptMemo } from "./solana";
-import { loadOrCreateWallet } from "./wallets";
+import { receiptMemo, requireFunds, type DevnetRpc } from "./solana";
+import { loadOrCreateWallet, walletEnvName } from "./wallets";
 
 describe("loadOrCreateWallet (offline)", () => {
   it("creates a key once in the CLI format and loads the same address next time", async () => {
@@ -26,5 +26,26 @@ describe("receiptMemo", () => {
     const memo = receiptMemo({ recommendationHash: "a".repeat(64), passportHash: "b".repeat(64), registryVersion: "2026-10-01.5", selectedOptionId: "re-hei" });
     expect(memo).toBe(`rwa-liquidity-agent receipt v1 rec=${"a".repeat(64)} passports=${"b".repeat(64)} registry=2026-10-01.5 selected=re-hei`);
     expect(Buffer.byteLength(memo)).toBeLessThan(400); // well inside one transaction
+  });
+});
+
+describe("wallets on a server without files", () => {
+  it("come from DEVNET_WALLET_<NAME>, and no file is written", async () => {
+    const source = mkdtempSync(join(tmpdir(), "wallets-"));
+    const original = await loadOrCreateWallet("investor-kyc-2", source);
+    const bytes = readFileSync(join(source, "investor-kyc-2.json"), "utf8");
+    const empty = mkdtempSync(join(tmpdir(), "wallets-"));
+    const fromEnv = await loadOrCreateWallet("investor-kyc-2", empty, { [walletEnvName("investor-kyc-2")]: bytes });
+    expect(walletEnvName("investor-kyc-2")).toBe("DEVNET_WALLET_INVESTOR_KYC_2");
+    expect(fromEnv.address).toBe(original.address);
+    expect(existsSync(join(empty, "investor-kyc-2.json"))).toBe(false);
+  });
+});
+
+describe("requireFunds", () => {
+  const rpcWith = (lamports: bigint) => ({ getBalance: () => ({ send: async () => ({ value: lamports }) }) }) as unknown as DevnetRpc;
+  it("pauses on-chain steps when the paying wallet is low", async () => {
+    await expect(requireFunds(rpcWith(BigInt(100_000_000)), "11111111111111111111111111111111" as never)).rejects.toThrow(/low on test SOL \(0\.100 SOL\)/);
+    await expect(requireFunds(rpcWith(BigInt(500_000_000)), "11111111111111111111111111111111" as never)).resolves.toBeUndefined();
   });
 });

@@ -2,7 +2,8 @@
 // (scripts/agent-chat.ts) and the web app (lib/web/server.ts), so both talk to the
 // same model, data sources and devnet wallets.
 //   GEMINI_API_KEY (required), GEMINI_MODEL; RENTCAST_API_KEY, PROPERTY_DATA_SOURCE=demo;
-//   PLAID_CLIENT_ID + PLAID_SECRET (sandbox); SOLANA_RPC_URL. Devnet wallets: .wallets/devnet.
+//   PLAID_CLIENT_ID + PLAID_SECRET (sandbox); SOLANA_RPC_URL; REGISTRY_FROZEN_ON (judging period).
+//   Devnet wallets: .wallets/devnet.
 
 import { createDevnetChain } from "../chain/devnet";
 import type { HeiWallets } from "../chain/heiLifecycle";
@@ -12,7 +13,8 @@ import { createPlaidSandboxSource } from "../integrations/plaid";
 import { createDemoPropertySource, createMemoryStore, createRentcastSource, withCache } from "../integrations/rentcast";
 import { createFileStore } from "../integrations/rentcastCache";
 import { createGeminiVision } from "../integrations/vision";
-import { getRegistry } from "../params/load";
+import { todayInNewYork } from "../params/dates";
+import { freezeRegistry, getRegistry } from "../params/load";
 import type { Registry } from "../params/types";
 import { createGeminiClient, DEFAULT_GEMINI_MODEL } from "./gemini";
 import type { AgentDeps } from "./orchestrator";
@@ -46,7 +48,8 @@ export async function createAgentServices(env: Env = process.env): Promise<Agent
   const [issuer, user, investor1, investor2, noKyc] = await Promise.all(
     ["issuer", "user", "investor-kyc", "investor-kyc-2", "investor-no-kyc"].map((name) => loadOrCreateWallet(name)),
   );
-  const registry = getRegistry();
+  // A deployment for the judging period freezes the values on one date (REGISTRY_FROZEN_ON).
+  const registry = env.REGISTRY_FROZEN_ON ? freezeRegistry(getRegistry(), env.REGISTRY_FROZEN_ON, todayInNewYork()) : getRegistry();
   return {
     agent: {
       llm: createGeminiClient({ apiKey, model }),

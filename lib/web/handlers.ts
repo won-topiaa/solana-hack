@@ -29,6 +29,13 @@ export type CaseReply = { token: string; view: CaseView };
 export class BadRequest extends Error {}
 
 const MAX_TEXT_CHARS = 2_000;
+
+/**
+ * Demo limits per case (owner, 2026-10-02): counted from the sealed case itself, so they
+ * need no server storage. A new case starts again at zero; the hosting's per-IP rate
+ * limit bounds how fast cases can be started.
+ */
+export const CASE_LIMITS = { messages: 40, photos: 6 };
 /** Base64 is 4 characters per 3 bytes. */
 const MAX_PHOTO_BASE64_CHARS = Math.ceil(MAX_PHOTO_BYTES / 3) * 4;
 
@@ -71,9 +78,15 @@ function photoFrom(value: unknown): { mimeType: string; bytes: Uint8Array } | un
 export async function postMessage(deps: WebDeps, input: { token: unknown; text: unknown; photo?: unknown }): Promise<CaseReply> {
   let caseFile = openToken(deps, input.token);
   if (caseFile.pendingApproval) throw new BadRequest("Answer the approval request first");
+  if (caseFile.messages.filter((message) => message.role === "user").length >= CASE_LIMITS.messages) {
+    throw new BadRequest(`This demo case has reached its limit of ${CASE_LIMITS.messages} messages. Start a new case to continue.`);
+  }
   let text = typeof input.text === "string" ? input.text.trim() : "";
   if (text.length > MAX_TEXT_CHARS) throw new BadRequest(`A message must be at most ${MAX_TEXT_CHARS} characters`);
   const photo = photoFrom(input.photo);
+  if (photo && Object.keys(caseFile.photos).length >= CASE_LIMITS.photos) {
+    throw new BadRequest(`This demo case has reached its limit of ${CASE_LIMITS.photos} photos. Start a new case to add more.`);
+  }
   if (photo) {
     try {
       const added = addPhoto(caseFile, photo, currentTime(deps));

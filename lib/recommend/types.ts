@@ -60,6 +60,7 @@ export type Recommendation = {
   reasons: string[];
   inputs: { goal: Goal; assets: AssetSummary[]; horizonYears: number; today: string };
   registryVersion: string;
+  valuesFrozenOn?: string; // set when the registry was frozen (judging period): freshness was checked on this date
   createdAt: string;
 };
 
