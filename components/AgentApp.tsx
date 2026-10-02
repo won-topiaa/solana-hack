@@ -237,7 +237,7 @@ export function AgentApp({ personas }: { personas: Persona[] }) {
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
-      <div className="grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div className="border-b border-neutral-800 lg:sticky lg:top-0 lg:h-[calc(100vh-1rem)] lg:border-b-0">
           <ChatPanel view={current.view} busy={busy} suggestions={suggestionsFor(current.view)} onSend={send} onAnswer={answer} />
         </div>

@@ -9,6 +9,14 @@ export function formatUsd(amount: number): string {
   return usd.format(amount);
 }
 
+/** For chart axes: 150000 -> "$150k", 1200000 -> "$1.2M", 900 -> "$900". */
+export function formatUsdCompact(amount: number): string {
+  const abs = Math.abs(amount);
+  if (abs >= 1_000_000) return `$${Number((amount / 1_000_000).toFixed(1))}M`;
+  if (abs >= 1_000) return `$${Number((amount / 1_000).toFixed(abs >= 10_000 ? 0 : 1))}k`;
+  return formatUsd(amount);
+}
+
 /** Micro-dollars (on-chain amounts, 6 decimals) in dollars: 144000069760 -> "$144,000.07". */
 export function formatMicroUsd(micro: bigint): string {
   return cents.format(Number(micro) / 1_000_000);

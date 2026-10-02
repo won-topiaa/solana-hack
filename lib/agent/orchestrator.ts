@@ -4,7 +4,7 @@
 
 import { todayInNewYork } from "../params/dates";
 import type { LlmClient } from "./llm";
-import { systemPrompt, type Channel } from "./prompts";
+import { caseSummary, systemPrompt, type Channel } from "./prompts";
 import type { SignedByWallet } from "../chain/userWallet";
 import type { AgentTool } from "./tools";
 import type { AgentMessage, CaseFile, PendingApproval, ToolCall, ToolResult } from "./types";
@@ -105,7 +105,7 @@ async function runModelLoop(start: CaseFile, deps: AgentDeps): Promise<TurnResul
     // Each step offers only its own tools, so the model cannot skip ahead.
     const offered = deps.tools.filter((tool) => tool.stages.includes(file.stage)).map((tool) => tool.declaration);
     const reply = await deps.llm.generate({
-      system: systemPrompt(file.stage, today, offered.map((tool) => tool.name), deps.channel),
+      system: systemPrompt(file.stage, today, offered.map((tool) => tool.name), deps.channel, caseSummary(file)),
       messages: file.messages,
       tools: offered,
     });

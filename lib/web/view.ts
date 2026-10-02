@@ -14,6 +14,7 @@ import { DEMO_PERSONAS } from "../recommend/personas";
 import { watchLabel } from "../recommend/recommend";
 import { describeTermSheet } from "../recommend/termSheet";
 import { settlementScenarios } from "../recommend/settlementScenarios";
+import { comparisonChart, heiChart, progressOf, type ComparisonChart, type HeiChart, type ProgressStep } from "./charts";
 import { isSelectable } from "../recommend/watches";
 
 export const NOT_ADVICE = "This is not investment or financial advice.";
@@ -38,6 +39,7 @@ export type CaseView = {
   caseId: string;
   persona: { id: string; title: string } | null; // a made-up demo persona, when one was loaded
   stage: Stage;
+  progress: ProgressStep[]; // goal -> ... -> on-chain (-> sale -> settlement for an HEI)
   chat: { role: "user" | "agent"; text: string }[];
   approval: { id: string; summary: string; needsWallet: boolean } | null;
   /** The user's own wallet, when connected; null: the demo wallet stands in. `locked`: on-chain records name it. */
@@ -60,6 +62,7 @@ export type CaseView = {
     reasons: string[];
     risks: string[];
     rules: string;
+    chart: ComparisonChart; // cash now vs the goal, monthly payment vs the budget, total cost
     frozenNote: string | null; // the registry is frozen for the judging period
     sources: { label: string; value: string; source: string; asOf: string }[];
     notice: string;
@@ -68,6 +71,7 @@ export type CaseView = {
     selected: string;
     recommended: string | null;
     termSheet: string[];
+    heiChart: HeiChart | null; // the payback over time and the ownership split, for an HEI
     passports: { label: string; hash: string }[];
     receipt: { recommendationHash: string; passportHash: string; registryVersion: string };
   } | null;
@@ -214,6 +218,7 @@ function comparisonOf(caseFile: CaseFile, registry: Registry): CaseView["compari
     reasons: rec.reasons,
     risks: chosen?.risks ?? [],
     rules: `Rules applied: ${rec.rulesFired.join(", ") || "none"}. Values from parameter registry ${rec.registryVersion}.`,
+    chart: comparisonChart(rec),
     frozenNote: rec.valuesFrozenOn ? frozenNote(rec.valuesFrozenOn) : null,
     sources: sourcesOf(rec.options.flatMap((option) => option.usedParamKeys), registry),
     notice: NOT_ADVICE,
@@ -230,6 +235,7 @@ function documentsOf(caseFile: CaseFile): CaseView["documents"] {
     selected: label(handoff.receipt.selectedOptionId) ?? handoff.receipt.selectedOptionId,
     recommended: label(handoff.receipt.recommendedOptionId),
     termSheet: handoff.termSheet ? describeTermSheet(handoff.termSheet) : [],
+    heiChart: handoff.termSheet ? heiChart(handoff.termSheet) : null,
     passports: handoff.passports.map((passport) => ({ label: assetName(passport.assetId), hash: hashOf(passport) })),
     receipt: { recommendationHash: handoff.receipt.recommendationHash, passportHash: handoff.receipt.passportHash, registryVersion: handoff.receipt.registryVersion },
   };
@@ -324,6 +330,7 @@ export function buildView(caseFile: CaseFile, registry: Registry, kycCheck = { l
     caseId: caseFile.id,
     persona: personaOf(caseFile),
     stage: caseFile.stage,
+    progress: progressOf(caseFile),
     chat: chatOf(caseFile),
     approval: caseFile.pendingApproval ? { id: caseFile.pendingApproval.id, summary: caseFile.pendingApproval.summary, needsWallet: approvalNeedsWallet(caseFile) } : null,
     wallet: caseFile.wallet ? { address: caseFile.wallet.address, locked: walletLocked(caseFile) } : null,

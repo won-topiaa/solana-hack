@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMicroUsd, formatMicroUsdExact, formatPercent, formatUsd } from "./format";
+import { formatMicroUsd, formatMicroUsdExact, formatPercent, formatUsd, formatUsdCompact } from "./format";
 
 describe("formatUsd", () => {
   it("writes whole US dollars with separators", () => {
@@ -24,5 +24,15 @@ describe("formatMicroUsd", () => {
     expect(formatMicroUsdExact(BigInt(144_000_069_760))).toBe("144,000.069760");
     expect(formatMicroUsdExact(BigInt(1))).toBe("0.000001");
     expect(formatMicroUsdExact(BigInt(-2_500_000))).toBe("-2.500000");
+  });
+});
+
+describe("formatUsdCompact", () => {
+  it("shortens amounts for chart axes", () => {
+    expect(formatUsdCompact(150_000)).toBe("$150k");
+    expect(formatUsdCompact(2_500)).toBe("$2.5k");
+    expect(formatUsdCompact(1_200_000)).toBe("$1.2M");
+    expect(formatUsdCompact(900)).toBe("$900");
+    expect(formatUsdCompact(0)).toBe("$0");
   });
 });

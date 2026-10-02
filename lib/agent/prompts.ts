@@ -1,7 +1,7 @@
 // The system prompt: the agent's role, the current step and hard rules. The
 // money math itself never comes from the model (CLAUDE.md §3 rule 3).
 
-import type { Stage } from "./types";
+import type { CaseFile, Stage } from "./types";
 
 /** Where the conversation happens: the terminal shows only the chat; the web app also shows a case panel. */
 export type Channel = "terminal" | "web";
@@ -109,7 +109,29 @@ const SHOWING_RESULTS: Record<Channel, string> = {
 };
 
 /** offeredTools: names of the tools the model gets in this step. */
-export function systemPrompt(stage: Stage, today: string, offeredTools: string[] = [], channel: Channel = "terminal"): string {
+/**
+ * What the case already holds, for the model: a demo persona or an earlier turn may have
+ * filled it without any message saying so. Ids and kinds only: no figures, no personal data.
+ */
+export function caseSummary(caseFile: CaseFile): string {
+  const lines: string[] = [];
+  lines.push(caseFile.goal ? `- Goal: recorded (asset to use: ${caseFile.goal.intent ?? "unsure"}).` : "- Goal: not recorded yet.");
+  if (caseFile.assets.length === 0) lines.push("- Assets: none yet.");
+  for (const asset of caseFile.assets) {
+    if (asset.kind === "real_estate") lines.push(`- ${asset.id}: the user's home, ${asset.avm ? "valued" : "not valued yet"}${asset.mortgageBalanceUsd !== undefined ? ", mortgage known" : ""}.`);
+    else lines.push(`- ${asset.id}: a watch, ${asset.marketValue ? "valued" : "not valued yet"}.`);
+  }
+  const rec = caseFile.recommendation;
+  lines.push(rec ? `- Comparison: done; recommended path ${rec.chosenId ?? "none (the user chooses)"}.` : "- Comparison: not done yet.");
+  lines.push(caseFile.handoff ? `- Documents: prepared for ${caseFile.handoff.receipt.selectedOptionId}.` : "- Documents: not prepared yet.");
+  const onchain = caseFile.handoff?.onchain;
+  const records = [onchain?.receipt && "receipt", onchain?.heiShares && "HEI share tokens", onchain?.watchToken && "watch token"].filter(Boolean);
+  if (records.length > 0) lines.push(`- On-chain: ${records.join(", ")} recorded.`);
+  if (caseFile.goal && caseFile.assets.length > 0 && !rec) lines.push("When the user asks to compare, call compare_paths right away: the goal and assets above are already in the case.");
+  return lines.join("\n");
+}
+
+export function systemPrompt(stage: Stage, today: string, offeredTools: string[] = [], channel: Channel = "terminal", summary?: string): string {
   const step = STEPS[stage].replace(
     "{{CONNECT_OPTION}}",
     offeredTools.includes("connect_mortgage_account") ? CONNECT_OPTION : "",
@@ -119,7 +141,7 @@ export function systemPrompt(stage: Stage, today: string, offeredTools: string[]
   return `${ROLE}
 
 ${step}
-
+${summary ? `\nWhat the case holds now (from the app; trust it over your memory of the chat):\n${summary}\n` : ""}
 Rules:
 - Today is ${today} (US Eastern time). Turn relative dates such as "next Friday" into a
   calendar date and confirm that date with the user.

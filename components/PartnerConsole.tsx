@@ -130,7 +130,7 @@ export function PartnerConsole() {
 
       <Step number={1} title="Closing and primary sale">
         {hei.sale ? (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
             <Lines lines={hei.sale.lines} />
             <div className="space-y-2.5">
               {hei.sale.links.map((link) => (
@@ -185,7 +185,7 @@ export function PartnerConsole() {
               {hei.settlement.correct ? <CircleCheck size={16} /> : <TriangleAlert size={16} />}
               {hei.settlement.correct ? "Checked on-chain: every holder was paid its share and every share is burned." : "The on-chain check failed."}
             </p>
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
               <Lines lines={hei.settlement.lines} />
               <div className="space-y-2.5">
                 {hei.settlement.links.map((link) => (

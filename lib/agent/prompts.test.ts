@@ -21,3 +21,16 @@ describe("how results reach the user", () => {
     }
   });
 });
+
+describe("the case summary for the model", () => {
+  it("tells the model a loaded persona's goal and home are already in the case, without figures", async () => {
+    const { personaCase } = await import("../recommend/personas");
+    const { caseSummary } = await import("./prompts");
+    const summary = caseSummary(personaCase("B", new Date("2026-10-01T15:00:00Z")));
+    expect(summary).toContain("- Goal: recorded (asset to use: home).");
+    expect(summary).toContain("- home-1: the user's home, valued, mortgage known.");
+    expect(summary).toContain("call compare_paths right away");
+    expect(summary).not.toMatch(/\d{3},\d{3}|\$/); // no amounts
+    expect(summary).not.toMatch(/Lane|Exampleville/); // no address
+  });
+});

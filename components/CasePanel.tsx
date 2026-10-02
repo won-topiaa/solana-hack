@@ -6,12 +6,16 @@ import { ChevronRight, CircleCheck, Coins, House, Receipt, Watch } from "lucide-
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { CaseView } from "@/lib/web/view";
+import { ComparisonCharts, HeiPaybackChart, OwnershipDonut, Progress } from "./charts";
 import { ChainRecord, DevnetTag, Hash, IconBox, Lines, Section, SimulatedTag } from "./ui";
 
 function Comparison({ comparison }: { comparison: NonNullable<CaseView["comparison"]> }) {
   return (
     <Section title="Every path compared">
       <p className="mb-4 text-[17px] font-medium tracking-[-0.3px] text-neutral-100">{comparison.headline}</p>
+      <div className="mb-4">
+        <ComparisonCharts chart={comparison.chart} />
+      </div>
       <div className="overflow-x-auto rounded-2xl border border-neutral-800">
         <table className="w-full min-w-[540px] text-left text-sm">
           <thead className="bg-neutral-950 text-xs text-neutral-500">
@@ -87,7 +91,16 @@ function Documents({ documents }: { documents: NonNullable<CaseView["documents"]
       </p>
       {documents.termSheet.length > 0 && (
         <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
-          <h3 className="mb-2 text-sm font-medium text-neutral-100">HEI term sheet</h3>
+          <h3 className="mb-3 text-sm font-medium text-neutral-100">HEI term sheet</h3>
+          {documents.heiChart && (
+            <div className="mb-5 space-y-5">
+              <OwnershipDonut share={documents.heiChart.share} />
+              <div>
+                <p className="mb-2 text-xs font-medium text-neutral-300">What you pay back, by when the HEI settles</p>
+                <HeiPaybackChart chart={documents.heiChart} />
+              </div>
+            </div>
+          )}
           <Lines lines={documents.termSheet} />
         </div>
       )}
@@ -115,6 +128,9 @@ const RECORD_ICONS: Record<string, ReactNode> = {
 export function CasePanel({ view }: { view: CaseView }) {
   return (
     <div>
+      <div className="border-b border-neutral-800 px-6 py-3">
+        <Progress steps={view.progress} />
+      </div>
       {view.persona && (
         <div className="flex flex-wrap items-center gap-2 border-b border-neutral-800 px-6 py-4 text-sm">
           <SimulatedTag label="Made-up persona" />
