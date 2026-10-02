@@ -49,3 +49,12 @@ describe("requireFunds", () => {
     await expect(requireFunds(rpcWith(BigInt(500_000_000)), "11111111111111111111111111111111" as never)).resolves.toBeUndefined();
   });
 });
+
+describe("a malformed wallet in the environment", () => {
+  it("names the variable without showing the value", async () => {
+    const secretish = "[12,34,56,not-a-number]";
+    const attempt = loadOrCreateWallet("issuer", mkdtempSync(join(tmpdir(), "wallets-")), { DEVNET_WALLET_ISSUER: secretish });
+    await expect(attempt).rejects.toThrow("DEVNET_WALLET_ISSUER must be the 64-number JSON array from .wallets/devnet/issuer.json");
+    await expect(attempt).rejects.not.toThrow(/12,34/);
+  });
+});

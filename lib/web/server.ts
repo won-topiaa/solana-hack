@@ -40,8 +40,18 @@ export async function handle(request: Request, action: Action, options: { showEr
     return Response.json({ error: "The request body must be JSON" }, { status: 400 });
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "The request body must be a JSON object" }, { status: 400 });
+  let deps: WebDeps;
   try {
-    return Response.json(await action(await webDeps(), body as Record<string, unknown>));
+    deps = await webDeps();
+  } catch (error) {
+    // A setup problem (a missing or malformed setting). These messages name the setting,
+    // never its value, so the deployer can see what to fix.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[api setup] ${message}`);
+    return Response.json({ error: `The server is not set up: ${message}` }, { status: 503 });
+  }
+  try {
+    return Response.json(await action(deps, body as Record<string, unknown>));
   } catch (error) {
     if (error instanceof BadRequest) return Response.json({ error: error.message }, { status: 400 });
     const message = error instanceof Error ? error.message : String(error);
