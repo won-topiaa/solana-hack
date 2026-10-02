@@ -23,6 +23,7 @@ import { createDemoPropertySource } from "../lib/integrations/rentcast";
 import { todayInNewYork } from "../lib/params/dates";
 import { getRegistry } from "../lib/params/load";
 import { personaCase } from "../lib/recommend/personas";
+import { createStepRunner } from "./agentSteps";
 
 const MIN_ISSUER_SOL = 0.05;
 
@@ -53,16 +54,7 @@ async function main() {
     propertySource: createDemoPropertySource(),
     chain: createDevnetChain(rpc, { issuer, user }),
   });
-  // Calls a tool the way the agent does after the user approved it.
-  const step = async (caseFile: CaseFile, name: string, args: Record<string, unknown> = {}): Promise<CaseFile> => {
-    const tool = tools.find((item) => item.declaration.name === name);
-    if (!tool) throw new Error(`No tool ${name}`);
-    const outcome = await tool.run(args, { caseFile, today, now });
-    const output = outcome.output as { display?: string; problem?: string; problems?: string[] };
-    console.log(`\n[${name}]\n${output.display ?? output.problem ?? output.problems?.join(" ") ?? JSON.stringify(output)}`);
-    if (output.problem || output.problems) throw new Error(`${name} stopped`);
-    return outcome.caseFile;
-  };
+  const step = createStepRunner(tools, today, now);
 
   console.log("=== Persona B: HEI share tokens ===");
   let homeCase = personaCase("B", now);

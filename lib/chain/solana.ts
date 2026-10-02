@@ -41,6 +41,7 @@ import {
   getSetAuthorityInstruction,
   getThawAccountInstruction,
   getUpdateTokenMetadataFieldInstruction,
+  getUpdateTokenMetadataUpdateAuthorityInstruction,
   TOKEN_2022_PROGRAM_ADDRESS,
   tokenMetadataField,
 } from "@solana-program/token-2022";
@@ -85,6 +86,18 @@ export async function sendInstructions(rpc: DevnetRpc, feePayer: TransactionSign
   return signature;
 }
 
+/** The program logs of a rejected transaction (from the RPC's simulation), to tell why it failed. */
+export function transactionLogs(error: unknown): string[] {
+  const logs: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const context = (current as { context?: { logs?: unknown } }).context;
+    if (Array.isArray(context?.logs)) logs.push(...context.logs.map(String));
+    current = (current as { cause?: unknown }).cause;
+  }
+  return logs;
+}
+
 export async function getSolBalance(rpc: DevnetRpc, owner: Address): Promise<number> {
   const { value } = await rpc.getBalance(owner).send();
   return Number(value) / 1e9;
@@ -122,12 +135,19 @@ export async function recordReceiptMemo(rpc: DevnetRpc, signer: KeyPairSigner, m
 }
 
 export type TokenInfo = { name: string; symbol: string; fields: [string, string][] };
-export type MintOptions = { frozenByDefault: boolean; freezeAuthority: boolean };
+export type MintOptions = {
+  decimals: number;
+  frozenByDefault: boolean; // new token accounts start frozen (KYC allowlist)
+  freezeAuthority: boolean; // the issuer can freeze and thaw accounts
+  permanentDelegate: boolean; // the issuer can move or burn tokens from any account (HEI settlement)
+};
 
-function mintExtensions(issuer: Address, mint: Address, info: TokenInfo, frozenByDefault: boolean) {
+function mintExtensions(issuer: Address, mint: Address, info: TokenInfo, options: MintOptions) {
   const fixed = [
-    ...(frozenByDefault ? [extension("DefaultAccountState", { state: AccountState.Frozen })] : []),
-    extension("MetadataPointer", { authority: some(issuer), metadataAddress: some(mint) }),
+    ...(options.frozenByDefault ? [extension("DefaultAccountState", { state: AccountState.Frozen })] : []),
+    ...(options.permanentDelegate ? [extension("PermanentDelegate", { delegate: issuer })] : []),
+    // No pointer authority: nobody can point the token at other metadata later.
+    extension("MetadataPointer", { authority: none(), metadataAddress: some(mint) }),
   ];
   const metadata = extension("TokenMetadata", {
     updateAuthority: some(issuer),
@@ -141,8 +161,9 @@ function mintExtensions(issuer: Address, mint: Address, info: TokenInfo, frozenB
 }
 
 /**
- * The instructions that create a Token-2022 mint with on-mint metadata and, optionally,
- * accounts frozen by default. No network calls (the rent is passed in), so tests can check them.
+ * The instructions that create a Token-2022 mint with on-mint metadata that nobody
+ * can change afterwards (the passport and recommendation hashes stay as written).
+ * No network calls (the rent is passed in), so tests can check them.
  */
 export function createMintInstructions(
   issuer: KeyPairSigner,
@@ -150,7 +171,7 @@ export function createMintInstructions(
   info: TokenInfo,
   options: MintOptions & { rent: Lamports },
 ): Instruction[] {
-  const { fixed, metadata } = mintExtensions(issuer.address, mint.address, info, options.frozenByDefault);
+  const { fixed, metadata } = mintExtensions(issuer.address, mint.address, info, options);
   return [
     // Space for the fixed extensions only: the metadata instructions grow the account themselves.
     getCreateAccountInstruction({
@@ -163,7 +184,7 @@ export function createMintInstructions(
     ...getPreInitializeInstructionsForMintExtensions(mint.address, fixed),
     getInitializeMint2Instruction({
       mint: mint.address,
-      decimals: 0,
+      decimals: options.decimals,
       mintAuthority: issuer.address,
       freezeAuthority: options.freezeAuthority ? issuer.address : null,
     }),
@@ -173,11 +194,13 @@ export function createMintInstructions(
     ...info.fields.map(([key, value]) =>
       getUpdateTokenMetadataFieldInstruction({ metadata: mint.address, updateAuthority: issuer, field: tokenMetadataField("Key", [key]), value }),
     ),
+    // Then give up the right to edit the metadata.
+    getUpdateTokenMetadataUpdateAuthorityInstruction({ metadata: mint.address, updateAuthority: issuer, newUpdateAuthority: none() }),
   ];
 }
 
-async function createMint(rpc: DevnetRpc, issuer: KeyPairSigner, mint: KeyPairSigner, info: TokenInfo, options: MintOptions) {
-  const { fixed, metadata } = mintExtensions(issuer.address, mint.address, info, options.frozenByDefault);
+export async function createMint(rpc: DevnetRpc, issuer: KeyPairSigner, mint: KeyPairSigner, info: TokenInfo, options: MintOptions) {
+  const { fixed, metadata } = mintExtensions(issuer.address, mint.address, info, options);
   // Rent for the full size, extra fields included, since the metadata grows the account.
   const rent = await rpc.getMinimumBalanceForRentExemption(BigInt(getMintSize([...fixed, metadata]))).send();
   const signature = await sendInstructions(rpc, issuer, createMintInstructions(issuer, mint, info, { ...options, rent }));
@@ -193,25 +216,35 @@ function failedAfterMint(mint: Address, error: unknown): Error {
   return new Error(`${message}. Token ${mint} may already exist (${explorerAddressUrl(mint)}); check it before trying again`);
 }
 
-async function tokenAccount(owner: Address, mint: Address): Promise<Address> {
+export async function tokenAccount(owner: Address, mint: Address): Promise<Address> {
   const [account] = await findAssociatedTokenPda({ owner, mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS });
   return account;
 }
 
 /**
+ * HEI shares: whole tokens; accounts frozen until KYC; the issuer (the simulated partner)
+ * pays holders and burns their tokens at settlement, so it is the permanent delegate.
+ */
+export const HEI_SHARE_MINT: MintOptions = { decimals: 0, frozenByDefault: true, freezeAuthority: true, permanentDelegate: true };
+/** The watch's 1-of-1 token belongs to its holder: no freezing, no delegate. */
+export const WATCH_TOKEN_MINT: MintOptions = { decimals: 0, frozenByDefault: false, freezeAuthority: false, permanentDelegate: false };
+
+/**
  * HEI shares: whole tokens (decimals 0), every new account frozen by default so
  * only allow-listed (KYC) wallets can hold them. The issuer's treasury is thawed
- * and receives the full supply for the primary sale.
+ * and receives the full supply for the primary sale; then minting is closed.
  */
 export async function createHeiShareMint(rpc: DevnetRpc, issuer: KeyPairSigner, tokenSupply: number, info: TokenInfo) {
   const mint = await generateKeyPairSigner();
   try {
-    const created = await createMint(rpc, issuer, mint, info, { frozenByDefault: true, freezeAuthority: true });
+    const created = await createMint(rpc, issuer, mint, info, HEI_SHARE_MINT);
     const treasury = await tokenAccount(issuer.address, created.mint);
     const minted = await sendInstructions(rpc, issuer, [
       await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner: issuer.address, mint: created.mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
       getThawAccountInstruction({ account: treasury, mint: created.mint, owner: issuer }),
       getMintToInstruction({ mint: created.mint, token: treasury, mintAuthority: issuer, amount: BigInt(tokenSupply) }),
+      // The supply is the term sheet's N for good: no more shares can ever be minted.
+      getSetAuthorityInstruction({ owned: created.mint, owner: issuer, authorityType: AuthorityType.MintTokens, newAuthority: none() }),
     ]);
     return { mint: created.mint, treasury, signatures: [created.signature, minted] };
   } catch (error) {
@@ -242,7 +275,7 @@ export async function openFrozenAccount(rpc: DevnetRpc, issuer: KeyPairSigner, m
 export async function createWatchToken(rpc: DevnetRpc, issuer: KeyPairSigner, owner: Address, info: TokenInfo) {
   const mint = await generateKeyPairSigner();
   try {
-    const created = await createMint(rpc, issuer, mint, info, { frozenByDefault: false, freezeAuthority: false });
+    const created = await createMint(rpc, issuer, mint, info, WATCH_TOKEN_MINT);
     const account = await tokenAccount(owner, created.mint);
     const minted = await sendInstructions(rpc, issuer, [
       await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner, mint: created.mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
@@ -255,9 +288,19 @@ export async function createWatchToken(rpc: DevnetRpc, issuer: KeyPairSigner, ow
   }
 }
 
-/** Reads a token account's state ("frozen" or "initialized") and balance, to show the allowlist working. */
-export async function readTokenAccount(rpc: DevnetRpc, account: Address): Promise<{ state: string; amount: string } | null> {
+export type TokenAccountState = { owner: Address; state: string; amount: string };
+
+/** Reads a token account's owner, state ("frozen" or "initialized") and balance. null when it does not exist. */
+export async function readTokenAccount(rpc: DevnetRpc, account: Address): Promise<TokenAccountState | null> {
   const { value } = await rpc.getAccountInfo(account, { encoding: "jsonParsed" }).send();
-  const parsed = (value?.data as { parsed?: { info?: { state?: string; tokenAmount?: { amount?: string } } } } | undefined)?.parsed?.info;
-  return parsed ? { state: parsed.state ?? "unknown", amount: parsed.tokenAmount?.amount ?? "0" } : null;
+  type Parsed = { parsed?: { info?: { owner?: Address; state?: string; tokenAmount?: { amount?: string } } } };
+  const parsed = (value?.data as Parsed | undefined)?.parsed?.info;
+  if (!parsed?.owner) return null;
+  return { owner: parsed.owner, state: parsed.state ?? "unknown", amount: parsed.tokenAmount?.amount ?? "0" };
+}
+
+/** The mint's current supply in base units. */
+export async function readSupply(rpc: DevnetRpc, mint: Address): Promise<bigint> {
+  const { value } = await rpc.getTokenSupply(mint).send();
+  return BigInt(value.amount);
 }

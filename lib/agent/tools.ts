@@ -723,7 +723,8 @@ export function createIssueHeiShares(chain: ChainService): AgentTool {
             done: true,
             display:
               `HEI share tokens created on Solana devnet: ${sheet.tokenSupply.toLocaleString("en-US")} tokens in the issuer's treasury ` +
-              `for the primary sale (the issuer is a simulated partner). New token accounts start frozen; only KYC-approved wallets are opened. ` +
+              `for the primary sale (the issuer is a simulated partner). The supply is fixed: no more can ever be minted. ` +
+              `New token accounts start frozen; only KYC-approved wallets are opened. ` +
               `Token: ${record.explorerUrls.at(-1)} . Transactions: ${record.explorerUrls.slice(0, -1).join(" , ")} .`,
           },
           caseFile: { ...caseFile, handoff: { ...handoff, onchain: { ...handoff.onchain, heiShares: record } }, stage: "execute" },

@@ -15,7 +15,7 @@ import {
 export const WALLET_DIR = ".wallets/devnet";
 
 /** issuer: plays the partners (HEI issuer, watch vault) on devnet; user: the homeowner or watch owner. */
-export const DEMO_WALLETS = ["issuer", "user", "investor-kyc", "investor-no-kyc"] as const;
+export const DEMO_WALLETS = ["issuer", "user", "investor-kyc", "investor-kyc-2", "investor-no-kyc"] as const;
 
 export async function loadOrCreateWallet(name: string, dir: string = WALLET_DIR): Promise<KeyPairSigner> {
   if (!/^[a-z0-9-]+$/.test(name)) throw new Error(`Bad wallet name: ${name}`);

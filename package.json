@@ -16,7 +16,8 @@
     "params:refresh": "tsx --env-file-if-exists=.env.local scripts/refresh-params.ts",
     "agent:chat": "tsx --env-file-if-exists=.env.local scripts/agent-chat.ts",
     "chain:wallets": "tsx --env-file-if-exists=.env.local scripts/chain-wallets.ts",
-    "chain:demo": "tsx --env-file-if-exists=.env.local scripts/chain-demo.ts"
+    "chain:demo": "tsx --env-file-if-exists=.env.local scripts/chain-demo.ts",
+    "chain:hei": "tsx --env-file-if-exists=.env.local scripts/chain-hei.ts"
   },
   "dependencies": {
     "@google/genai": "^2.25.0",
