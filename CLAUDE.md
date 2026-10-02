@@ -73,7 +73,8 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | Abuse limits | Owner, 2026-10-02: Vercel WAF rate limit (one rule on Hobby) on the API routes, plus in-app limits: 40 messages and 6 photos per case (counted from the sealed case), on-chain steps paused below 0.2 devnet SOL in the issuer wallet |
 | Hosting | **Vercel** (owner, 2026-10-02): Hobby functions run up to 300 s (https://vercel.com/docs/functions/configuring-functions/duration), enough for devnet confirmations; secrets in Vercel environment variables |
 | Web UI | Owner, 2026-10-02: one page with the chat (photos, approval cards) and a case panel that fills step by step (goal, assets, comparison, term sheet, hashes, on-chain links); HEI sale and settlement on a separate partner/investor page. Signing: server-side devnet demo wallets approved by UI buttons first; Phantom later if time allows |
-| OSS license | **TBD** (decide with the README, M10) |
+| OSS license | **MIT** (owner, 2026-10-02), `LICENSE` at the repo root |
+| Repository | GitHub `won-topiaa/solana-hack` (owner, 2026-10-02; private for now), pushed over SSH |
 
 ---
 

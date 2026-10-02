@@ -53,3 +53,7 @@ of New York; see [THIRD_PARTY.md](THIRD_PARTY.md) for the full notices and terms
 ## Third-party code
 
 See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE). Third-party code, fonts and data sources are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
