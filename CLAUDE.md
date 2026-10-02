@@ -1,6 +1,6 @@
 # CLAUDE.md — Project instructions for Claude Code
 
-> Codename: **rwa-liquidity-agent** (final name TBD, see `docs/internal/PLAN.md` §15)
+> Product name: **Ownflow** ("Cash flow from what you own"; owner, 2026-10-02). The local folder keeps the old working name `rwa-liquidity-agent`; the GitHub repo is `won-topiaa/solana-hack`.
 > Builder: solo. Hackathon: Colosseum **Crypto World's Fair** (CWF). Target market: **United States**.
 > Hard deadline: **Oct 12, 2026 11:59 PM PT = Oct 13, 2026 3:59 PM KST** (Official Rules §5). Internal target: submit by **Oct 12, 2026 11:00 PM KST**.
 > Full plan (Korean): `docs/internal/PLAN.md`. Running log: `docs/internal/PROGRESS.md`. Parameter registry: `data/params.json`.
@@ -65,7 +65,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | HELOC-first rule | If repayment planned within 3 years, show HELOC / home equity loan first (decided) |
 | Chain / track | **Solana** (decided 2026-10-01): devnet for the demo, Solana track (Rules §14(e)); Token-2022. Libraries: official `@solana/kit` + `@solana-program/{token-2022,system,memo}` (decided 2026-10-02 by the owner; Solana Agent Kit v2 does not document DefaultAccountState, freeze/thaw or memo) |
 | Arena category | Tentative: Real World Assets (RWA); alternative: AI Platforms / Agents |
-| Project name | **TBD** (repo and package use the working name `rwa-liquidity-agent` until decided) |
+| Project name | **Ownflow** (owner, 2026-10-02), tagline "Cash flow from what you own." Package name `ownflow`; on-chain memos start with `ownflow`. A quick USPTO exact-word search and web search found no OWNFLOW mark (not a trademark clearance) |
 | LLM provider | **Google Gemini API** (decided 2026-10-01), SDK `@google/genai`, default model `gemini-3.8-flash` (function calling + image input), key `GEMINI_API_KEY` in `.env.local` |
 | HEI on-chain (M8) | Owner, 2026-10-02: payments in our own devnet test dollar "DUSD" (6 decimals like USDC, no value; Circle's devnet faucet gives 20 USDC per 2 hours); the partner pays the homeowner at closing, then sells the shares; at settlement the issuer, as Token-2022 permanent delegate, burns each holder's tokens in the same transaction as that holder's payment; HEI supply fixed after minting, token metadata locked (no update or pointer authority); freeze authority kept for KYC |
 | Watch price data source | **TBD** (no API verified yet; MVP uses a manual price table with source + date) |
@@ -285,7 +285,7 @@ type Receipt = { recommendedOptionId: string | null; selectedOptionId: string; r
 ---
 
 ## 11. Commands
-Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vitest 5 (Next.js alone needs 20.9+); tested with Node 24, npm 11.
+Run from the repo root (the `rwa-liquidity-agent/` folder). Requires Node.js 22.12+ for Vitest 5 (Next.js alone needs 20.9+); tested with Node 24, npm 11.
 
 | Command | What it does |
 |---|---|

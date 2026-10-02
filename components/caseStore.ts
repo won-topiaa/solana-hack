@@ -7,7 +7,7 @@ import type { CaseView } from "@/lib/web/view";
 
 export type CaseReplyJson = { token: string; view: CaseView };
 
-const KEY = "rwa-liquidity-agent.case";
+const KEY = "ownflow.case";
 const listeners = new Set<() => void>();
 let memory: string | null = null; // when sessionStorage is blocked (some private windows)
 

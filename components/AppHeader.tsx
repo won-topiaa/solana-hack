@@ -9,9 +9,9 @@ export function AppHeader() {
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-3">
           <Link href="/" className="font-semibold">
-            rwa-liquidity-agent
+            Ownflow
           </Link>
-          <span className="text-xs text-zinc-500">working name</span>
+          <span className="hidden text-xs text-zinc-500 sm:inline">Cash flow from what you own</span>
           <DevnetTag />
         </div>
         <nav className="flex items-center gap-4 text-sm">

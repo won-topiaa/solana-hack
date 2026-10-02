@@ -68,7 +68,7 @@ describe("HEI on Solana devnet (persona B)", () => {
     file = (await sendUserMessage(file, "p", deps)).caseFile;
     await turnApproving(file, "r", deps);
     const memo = String(chain.calls[0].input);
-    expect(memo).toMatch(/^rwa-liquidity-agent receipt v1 rec=[0-9a-f]{64} passports=[0-9a-f]{64} registry=2026-10-01\.3 selected=re-hei$/);
+    expect(memo).toMatch(/^ownflow receipt v1 rec=[0-9a-f]{64} passports=[0-9a-f]{64} registry=2026-10-01\.3 selected=re-hei$/);
     expect(memo).not.toMatch(/Demo Lane|Jordan|Exampleville/);
   });
 

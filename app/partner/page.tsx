@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { AppFooter, AppHeader } from "@/components/AppHeader";
 import { PartnerConsole } from "@/components/PartnerConsole";
 
-export const metadata: Metadata = { title: "Partner & investors · rwa-liquidity-agent" };
+export const metadata: Metadata = { title: "Partner & investors · Ownflow" };
 
 export default function PartnerPage() {
   return (

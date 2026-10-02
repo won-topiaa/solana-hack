@@ -25,7 +25,7 @@ export type PaymentToken = { mint: Address; program: Address; decimals: number; 
 const TEST_DOLLAR_INFO: TokenInfo = {
   name: "Demo USD (test token, no value)",
   symbol: "DUSD",
-  fields: [["purpose", "devnet test dollars for the rwa-liquidity-agent demo; no value"]],
+  fields: [["purpose", "devnet test dollars for the Ownflow demo; no value"]],
 };
 const TEST_DOLLAR_MINT: MintOptions = { decimals: PAYMENT_DECIMALS, frozenByDefault: false, freezeAuthority: false, permanentDelegate: false };
 

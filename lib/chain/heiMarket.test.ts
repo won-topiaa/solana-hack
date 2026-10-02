@@ -89,7 +89,7 @@ describe("a settlement batch (offline)", () => {
     const supply = holdings.reduce((sum, holding) => sum + holding.tokens, BigInt(0));
     const payouts = payoutsFor(BigInt(1_500_000_000), holdings, supply);
     const token = await testDollar();
-    const steps = await settlementInstructions({ homeowner, issuer, heiMint: heiMint.address, token, payouts, memo: "rwa-liquidity-agent settlement v1 test" });
+    const steps = await settlementInstructions({ homeowner, issuer, heiMint: heiMint.address, token, payouts, memo: "ownflow settlement v1 test" });
     return { homeowner, issuer, payouts, steps, token };
   }
 

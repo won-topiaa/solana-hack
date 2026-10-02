@@ -24,7 +24,7 @@ describe("loadOrCreateWallet (offline)", () => {
 describe("receiptMemo", () => {
   it("contains only hashes, the registry version and the chosen path id", () => {
     const memo = receiptMemo({ recommendationHash: "a".repeat(64), passportHash: "b".repeat(64), registryVersion: "2026-10-01.5", selectedOptionId: "re-hei" });
-    expect(memo).toBe(`rwa-liquidity-agent receipt v1 rec=${"a".repeat(64)} passports=${"b".repeat(64)} registry=2026-10-01.5 selected=re-hei`);
+    expect(memo).toBe(`ownflow receipt v1 rec=${"a".repeat(64)} passports=${"b".repeat(64)} registry=2026-10-01.5 selected=re-hei`);
     expect(Buffer.byteLength(memo)).toBeLessThan(400); // well inside one transaction
   });
 });

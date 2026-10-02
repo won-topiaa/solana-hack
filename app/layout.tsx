@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "rwa-liquidity-agent (working name)",
+  title: "Ownflow: cash flow from what you own",
   description:
     "A neutral AI agent that compares every way to turn a home or a watch into cash, and tokenizes on Solana only when you approve.",
 };

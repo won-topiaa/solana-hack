@@ -1,4 +1,6 @@
-# rwa-liquidity-agent (working name)
+# Ownflow
+
+**Cash flow from what you own.**
 
 A neutral AI agent for US users who need cash. It compares every way to turn a home or a
 luxury watch into cash, including non-crypto options such as a HELOC, and connects the user

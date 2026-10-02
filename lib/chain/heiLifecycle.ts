@@ -184,7 +184,7 @@ export async function runSettlement(
 
   const owners = input.sale.purchases.map((purchase) => address(purchase.owner));
   const before = await Promise.all(owners.map((owner) => paymentBalance(rpc, token, owner)));
-  const memo = `rwa-liquidity-agent settlement v1 mint=${heiMint} trigger=${trigger} years=${years} value=${homeValueUsd.toFixed(2)} payout=${payout} registry=${deal.registryVersion}`;
+  const memo = `ownflow settlement v1 mint=${heiMint} trigger=${trigger} years=${years} value=${homeValueUsd.toFixed(2)} payout=${payout} registry=${deal.registryVersion}`;
   const run = await settleHeiShares(rpc, {
     homeowner,
     issuer,

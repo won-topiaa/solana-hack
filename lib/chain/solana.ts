@@ -136,7 +136,7 @@ export function receiptMemo(receipt: {
   selectedOptionId: string;
 }): string {
   return (
-    `rwa-liquidity-agent receipt v1 rec=${receipt.recommendationHash} passports=${receipt.passportHash} ` +
+    `ownflow receipt v1 rec=${receipt.recommendationHash} passports=${receipt.passportHash} ` +
     `registry=${receipt.registryVersion} selected=${receipt.selectedOptionId}`
   );
 }

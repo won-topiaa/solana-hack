@@ -31,7 +31,7 @@ type Env = Record<string, string | undefined>;
 
 export async function createAgentServices(env: Env = process.env): Promise<AgentServices> {
   const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set. Add it to .env.local (see .env.example).");
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set. Set it in .env.local, or in the hosting's environment variables (see .env.example).");
   const model = env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
   // Real RentCast data when a key is set, unless PROPERTY_DATA_SOURCE=demo (for demo recordings).
   const rentcastKey = env.RENTCAST_API_KEY;
