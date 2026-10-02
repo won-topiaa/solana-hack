@@ -22,7 +22,7 @@ import { describeRecommendation } from "../recommend/display";
 import { buildPassport, buildReceipt, type AssetPassport } from "../recommend/passport";
 import { isSelectable } from "../recommend/watches";
 import type { ChainService } from "../chain/adapter";
-import { receiptMemo } from "../chain/solana";
+import { describeChainError, receiptMemo } from "../chain/solana";
 import { assetSummaries, realEstateTerms, recommend, watchLabel } from "../recommend/recommend";
 import { buildHeiTermSheet, describeTermSheet, type HeiTermSheet } from "../recommend/termSheet";
 
@@ -650,7 +650,7 @@ function staleDocuments(caseFile: CaseFile): ToolOutcome {
 }
 
 function chainFailure(caseFile: CaseFile, error: unknown): ToolOutcome {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = describeChainError(error);
   return { output: { done: false, problem: `The devnet transaction failed: ${message}. Is the issuer wallet funded? (npm run chain:wallets)` }, caseFile };
 }
 

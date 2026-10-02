@@ -5,13 +5,13 @@
 // money for the settlement. Payments use test dollars with no value.
 // Amounts are kept as strings of micro-dollars, so the records stay plain JSON.
 
-import { address, type KeyPairSigner } from "@solana/kit";
+import { address, type Address, type KeyPairSigner } from "@solana/kit";
 import { purchaseCostMicroUsd, sumMicroUsd, tokenPriceMicroUsd, toMicroUsd } from "../calc/sale";
 import { homeValueAfterYears, settle } from "../calc/settlement";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import { buyShares, payAtClosing } from "./heiSale";
 import { settleHeiShares } from "./heiSettlement";
-import { loadOrCreateTestDollar, mintTestDollars, paymentBalance } from "./payment";
+import { loadOrCreateTestDollar, mintTestDollars, paymentBalance, type PaymentToken } from "./payment";
 import { allowlistInvestor, openFrozenAccount, readSupply, readTokenAccount, requireFunds, transactionLogs, type DevnetRpc } from "./solana";
 
 /** What the sale and the settlement need from the term sheet. */
@@ -30,10 +30,10 @@ export type HeiWallets = {
 export type SaleRecord = {
   paymentMint: string;
   closing: { amountMicroUsd: string; signature: string };
-  kyc: { name: string; owner: string; account: string; signature: string }[];
+  kyc: { name: string; owner: string; account: string; signature: string | null }[]; // null: already open
   frozenAccount: string; // the buyer without KYC
   rejected: { tokens: string; reason: string; moneyMoved: boolean };
-  purchases: { name: string; owner: string; tokens: string; costMicroUsd: string; signature: string }[];
+  purchases: { name: string; owner: string; tokens: string; costMicroUsd: string; signature: string | null }[]; // null: bought in an earlier, interrupted run
   raisedMicroUsd: string;
   register: string[]; // the share accounts the issuer opened: only these can hold shares
   at: string;
@@ -70,9 +70,22 @@ export function allocation(supply: bigint, investorCount: number): bigint[] {
   return [FIRST_INVESTOR_TOKENS, supply - FIRST_INVESTOR_TOKENS, ...Array<bigint>(investorCount - 2).fill(BigInt(0))];
 }
 
+/** Shares still to buy for an investor who may already hold some from an earlier, interrupted run. */
+export function sharesToBuy(allocated: bigint, alreadyHeld: bigint): bigint {
+  return alreadyHeld >= allocated ? BigInt(0) : allocated - alreadyHeld;
+}
+
+/** Mints test dollars only up to what the wallet needs, so a retry does not mint again. */
+async function topUp(rpc: DevnetRpc, wallets: HeiWallets, token: PaymentToken, owner: Address, needed: bigint): Promise<void> {
+  const balance = await paymentBalance(rpc, token, owner);
+  if (balance < needed) await mintTestDollars(rpc, wallets.issuer, token, owner, needed - balance);
+}
+
 /**
  * KYC, closing and the primary sale. The partner pays the homeowner first (owner,
- * 2026-10-02), then sells; a buyer without KYC is refused on-chain.
+ * 2026-10-02), then sells; a buyer without KYC is refused on-chain. Safe to run again
+ * after an interruption: each step looks at the chain first and skips what is done
+ * (open KYC accounts, the closing payment's memo, shares an investor already holds).
  */
 export async function runPrimarySale(
   rpc: DevnetRpc,
@@ -85,10 +98,8 @@ export async function runPrimarySale(
   const treasury = address(input.treasury);
   const price = tokenPriceMicroUsd(input.deal.tokenPriceUsd);
   const supply = BigInt(input.deal.tokenSupply);
+  const amounts = allocation(supply, wallets.investors.length);
   await requireFunds(rpc, issuer.address);
-  if ((await readTokenAccount(rpc, treasury))?.amount !== String(supply)) {
-    throw new Error("The treasury does not hold the whole supply: the sale already ran or the shares were not issued");
-  }
 
   // KYC (simulated): open and thaw the approved investors' accounts; the other stays frozen.
   const kyc: SaleRecord["kyc"] = [];
@@ -98,47 +109,68 @@ export async function runPrimarySale(
   }
   const frozen = await openFrozenAccount(rpc, issuer, heiMint, noKyc.address);
 
-  // Test dollars: the partner's money for closing and each buyer's money.
+  // Where the sale stands: shares the investors already hold must be all that left the treasury.
+  const held = await Promise.all(kyc.map(async (item) => BigInt((await readTokenAccount(rpc, address(item.account)))?.amount ?? "0")));
+  const inTreasury = BigInt((await readTokenAccount(rpc, treasury))?.amount ?? "0");
+  if (inTreasury + held.reduce((sum, amount) => sum + amount, BigInt(0)) !== supply) {
+    throw new Error("The shares are not where the sale left them: the treasury and the investors do not add up to the supply");
+  }
+
+  // Test dollars: the partner's money for closing and each buyer's money (only what is missing).
   const token = await loadOrCreateTestDollar(rpc, issuer);
   const netCash = toMicroUsd(input.deal.netCashUsd);
-  const amounts = allocation(supply, wallets.investors.length);
-  await mintTestDollars(rpc, issuer, token, issuer.address, netCash);
+  const toBuy = amounts.map((amount, index) => sharesToBuy(amount, held[index]));
+  await topUp(rpc, wallets, token, issuer.address, netCash);
   for (const [index, investor] of wallets.investors.entries()) {
-    if (amounts[index] > BigInt(0)) await mintTestDollars(rpc, issuer, token, investor.wallet.address, purchaseCostMicroUsd(amounts[index], price));
+    if (toBuy[index] > BigInt(0)) await topUp(rpc, wallets, token, investor.wallet.address, purchaseCostMicroUsd(toBuy[index], price));
   }
-  await mintTestDollars(rpc, issuer, token, noKyc.address, purchaseCostMicroUsd(REJECTED_TOKENS, price));
 
-  // Closing: the partner pays the homeowner the net cash.
-  const before = await paymentBalance(rpc, token, homeowner.address);
-  const closing = await payAtClosing(rpc, issuer, token, homeowner.address, netCash);
-  if ((await paymentBalance(rpc, token, homeowner.address)) - before !== netCash) throw new Error("The homeowner did not receive the net cash");
+  // Closing: the partner pays the homeowner the net cash, once.
+  const closing = await payAtClosing(rpc, issuer, token, homeowner.address, netCash, heiMint);
 
-  // The buyer without KYC first, while the treasury still has shares, so only KYC can stop it.
-  const rejectedBefore = await paymentBalance(rpc, token, noKyc.address);
-  let reason = "";
-  try {
-    await buyShares(rpc, issuer, { issuer, buyer: noKyc, heiMint, treasury, token, tokens: REJECTED_TOKENS, priceMicroUsd: price });
-  } catch (error) {
-    if (!transactionLogs(error).some((line) => line.includes("Account is frozen"))) throw error;
-    reason = "Account is frozen";
+  // The buyer without KYC, while the treasury still has shares, so only KYC can stop it.
+  let rejected: SaleRecord["rejected"];
+  if (inTreasury >= REJECTED_TOKENS) {
+    await topUp(rpc, wallets, token, noKyc.address, purchaseCostMicroUsd(REJECTED_TOKENS, price));
+    const before = await paymentBalance(rpc, token, noKyc.address);
+    let reason = "";
+    try {
+      await buyShares(rpc, issuer, { issuer, buyer: noKyc, heiMint, treasury, token, tokens: REJECTED_TOKENS, priceMicroUsd: price });
+    } catch (error) {
+      if (!transactionLogs(error).some((line) => line.includes("Account is frozen"))) throw error;
+      reason = "Account is frozen";
+    }
+    if (!reason) throw new Error("A buyer without KYC received shares");
+    const moneyMoved = (await paymentBalance(rpc, token, noKyc.address)) !== before;
+    if (moneyMoved) throw new Error("Money moved in a rejected purchase");
+    rejected = { tokens: String(REJECTED_TOKENS), reason, moneyMoved };
+  } else {
+    rejected = { tokens: String(REJECTED_TOKENS), reason: "Not tried again: the shares were already sold", moneyMoved: false };
   }
-  if (!reason) throw new Error("A buyer without KYC received shares");
-  const moneyMoved = (await paymentBalance(rpc, token, noKyc.address)) !== rejectedBefore;
-  if (moneyMoved) throw new Error("Money moved in a rejected purchase");
 
   const purchases: SaleRecord["purchases"] = [];
   for (const [index, investor] of wallets.investors.entries()) {
     if (amounts[index] === BigInt(0)) continue;
-    const bought = await buyShares(rpc, issuer, { issuer, buyer: investor.wallet, heiMint, treasury, token, tokens: amounts[index], priceMicroUsd: price });
-    purchases.push({ name: investor.name, owner: investor.wallet.address, tokens: String(amounts[index]), costMicroUsd: String(bought.costMicroUsd), signature: bought.signature });
+    let signature: string | null = null;
+    if (toBuy[index] > BigInt(0)) {
+      const bought = await buyShares(rpc, issuer, { issuer, buyer: investor.wallet, heiMint, treasury, token, tokens: toBuy[index], priceMicroUsd: price });
+      signature = bought.signature;
+    }
+    purchases.push({
+      name: investor.name,
+      owner: investor.wallet.address,
+      tokens: String(amounts[index]),
+      costMicroUsd: String(purchaseCostMicroUsd(amounts[index], price)),
+      signature,
+    });
   }
 
   return {
     paymentMint: token.mint,
-    closing: { amountMicroUsd: String(netCash), signature: closing },
+    closing: { amountMicroUsd: String(netCash), signature: closing.signature },
     kyc,
     frozenAccount: frozen.account,
-    rejected: { tokens: String(REJECTED_TOKENS), reason, moneyMoved },
+    rejected,
     purchases,
     raisedMicroUsd: String(sumMicroUsd(purchases.map((purchase) => BigInt(purchase.costMicroUsd)))),
     register: [treasury, ...kyc.map((item) => item.account)],

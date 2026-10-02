@@ -234,7 +234,7 @@ function heiOf(caseFile: CaseFile): CaseView["hei"] {
           ],
           links: [
             { label: "Closing payment", url: explorerTxUrl(sale.closing.signature) },
-            ...sale.purchases.map((purchase) => ({ label: `${purchase.name} purchase`, url: explorerTxUrl(purchase.signature) })),
+            ...sale.purchases.flatMap((purchase) => (purchase.signature ? [{ label: `${purchase.name} purchase`, url: explorerTxUrl(purchase.signature) }] : [])),
             { label: "Account without KYC (frozen)", url: explorerAddressUrl(sale.frozenAccount) },
             { label: "Test dollar (DUSD, no value)", url: explorerAddressUrl(sale.paymentMint) },
           ],

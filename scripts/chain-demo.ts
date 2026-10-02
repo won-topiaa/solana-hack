@@ -69,7 +69,7 @@ async function main() {
   console.log("\n[KYC allowlist]");
   for (const [label, item] of [["KYC-approved investor", approved], ["investor without KYC", notApproved]] as const) {
     const state = await readTokenAccount(rpc, item.account);
-    console.log(`${label}: token account ${state?.state ?? "missing"} (${explorerAddressUrl(item.account)}), tx ${explorerTxUrl(item.signature)}`);
+    console.log(`${label}: token account ${state?.state ?? "missing"} (${explorerAddressUrl(item.account)}), tx ${item.signature ? explorerTxUrl(item.signature) : "(already open)"}`);
   }
 
   console.log("\n=== Persona A: watch 1-of-1 token ===");

@@ -4,6 +4,7 @@
 
 import "server-only";
 import { createAgentServices } from "../agent/services";
+import { describeChainError } from "../chain/solana";
 import { BadRequest, type CaseReply, type WebDeps } from "./handlers";
 
 let services: Promise<WebDeps> | null = null;
@@ -54,7 +55,7 @@ export async function handle(request: Request, action: Action, options: { showEr
     return Response.json(await action(deps, body as Record<string, unknown>));
   } catch (error) {
     if (error instanceof BadRequest) return Response.json({ error: error.message }, { status: 400 });
-    const message = error instanceof Error ? error.message : String(error);
+    const message = describeChainError(error);
     // Our own error messages carry no case contents, so the message alone is logged.
     console.error(`[api ${new URL(request.url).pathname}] ${message}`);
     return Response.json({ error: options.showErrors ? message : "Something went wrong on the server. Please try again." }, { status: 500 });

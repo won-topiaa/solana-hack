@@ -84,7 +84,7 @@ async function main() {
   console.log(`Closing: the homeowner received ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (term sheet: ${formatUsd(deal.netCashUsd)}): ${explorerTxUrl(sale.closing.signature)}`);
   console.log(`Investor without KYC: purchase rejected by Token-2022 ("${sale.rejected.reason}"); money moved: ${sale.rejected.moneyMoved ? "YES" : "none"}.`);
   for (const purchase of sale.purchases) {
-    console.log(`${purchase.name} bought ${BigInt(purchase.tokens).toLocaleString("en-US")} shares for ${formatMicroUsd(BigInt(purchase.costMicroUsd))}: ${explorerTxUrl(purchase.signature)}`);
+    console.log(`${purchase.name} bought ${BigInt(purchase.tokens).toLocaleString("en-US")} shares for ${formatMicroUsd(BigInt(purchase.costMicroUsd))}: ${purchase.signature ? explorerTxUrl(purchase.signature) : "(in an earlier run)"}`);
   }
   console.log(`Raised ${formatMicroUsd(BigInt(sale.raisedMicroUsd))} (term sheet: investors pay ${formatUsd(deal.grossInvestmentUsd)}).`);
 

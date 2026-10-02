@@ -19,8 +19,8 @@ import {
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
 import { describe, expect, it } from "vitest";
-import { allocation } from "./heiLifecycle";
-import { purchaseInstructions } from "./heiSale";
+import { allocation, sharesToBuy } from "./heiLifecycle";
+import { closingMemo, findClosing, purchaseInstructions } from "./heiSale";
 import { HOLDERS_PER_TRANSACTION, payoutsFor, settleHeiShares, settlementInstructions, type ShareHolding } from "./heiSettlement";
 import { paymentAccount, type PaymentToken } from "./payment";
 import { tokenAccount, type DevnetRpc } from "./solana";
@@ -182,5 +182,24 @@ describe("allocation of the primary sale", () => {
     expect(allocation(BigInt(234_131), 1)).toEqual([BigInt(234_131)]);
     expect(allocation(BigInt(90_000), 2)).toEqual([BigInt(90_000), BigInt(0)]);
     expect(() => allocation(BigInt(1), 0)).toThrow(RangeError);
+  });
+});
+
+describe("a sale that is run again after an interruption", () => {
+  it("buys only the shares an investor does not hold yet", () => {
+    expect(sharesToBuy(BigInt(150_000), BigInt(0))).toBe(BigInt(150_000));
+    expect(sharesToBuy(BigInt(150_000), BigInt(150_000))).toBe(BigInt(0));
+    expect(sharesToBuy(BigInt(150_000), BigInt(40_000))).toBe(BigInt(110_000));
+  });
+
+  it("finds the earlier closing payment of this HEI by its memo, and only a successful one", async () => {
+    const [mint, other] = await signers(2);
+    const entries = [
+      { signature: "failed", memo: `[57] ${closingMemo(mint.address)}`, err: { InstructionError: [0, "Custom"] } },
+      { signature: "other-hei", memo: `[57] ${closingMemo(other.address)}`, err: null },
+      { signature: "paid", memo: `[57] ${closingMemo(mint.address)}`, err: null },
+    ];
+    expect(findClosing(entries, mint.address)).toBe("paid");
+    expect(findClosing(entries.slice(0, 2), mint.address)).toBeNull();
   });
 });

@@ -5,9 +5,14 @@
 
 import {
   appendTransactionMessageInstructions,
-  createSolanaRpc,
+  createDefaultRpcTransport,
+  createSolanaRpcFromTransport,
   createTransactionMessage,
   devnet,
+  isSolanaError,
+  SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
+  SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED,
+  type RpcTransport,
   generateKeyPairSigner,
   getBase64EncodedWireTransaction,
   getSignatureFromTransaction,
@@ -51,12 +56,55 @@ export const DEVNET_RPC_URL = "https://api.devnet.solana.com";
 export const explorerTxUrl = (signature: string) => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
 export const explorerAddressUrl = (address: string) => `https://explorer.solana.com/address/${address}?cluster=devnet`;
 
+/** An RPC answer worth retrying: rate limited (HTTP 429), a busy node (5xx), or no connection. */
+export function isRetriable(error: unknown): boolean {
+  if (isSolanaError(error, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR)) {
+    const status = error.context.statusCode;
+    return status === 429 || status >= 500;
+  }
+  return error instanceof TypeError; // fetch's network failure
+}
+
+export function isRateLimited(error: unknown): boolean {
+  return isSolanaError(error, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR) && error.context.statusCode === 429;
+}
+
+/**
+ * Retries a call that failed for a passing reason, waiting longer each time (0.5 s, 1 s,
+ * 2 s, ...). Shared hosting shares its outgoing IP address, and the public devnet RPC
+ * limits requests per IP, so a busy minute should slow the demo down, not break it.
+ */
+export function withRetries<T extends RpcTransport>(
+  transport: T,
+  options: { attempts?: number; firstDelayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): T {
+  const { attempts = 6, firstDelayMs = 500, sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) } = options;
+  const retrying = async (config: Parameters<RpcTransport>[0]) => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await transport(config);
+      } catch (error) {
+        if (attempt >= attempts || !isRetriable(error)) throw error;
+        await sleep(firstDelayMs * 2 ** (attempt - 1));
+      }
+    }
+  };
+  return retrying as T;
+}
+
 export function createDevnetRpc(url: string = DEVNET_RPC_URL) {
-  return createSolanaRpc(devnet(url));
+  return createSolanaRpcFromTransport(withRetries(createDefaultRpcTransport({ url: devnet(url) })));
 }
 export type DevnetRpc = ReturnType<typeof createDevnetRpc>;
 
-const POLL_MS = 1500;
+/** What to tell a person when a devnet step fails. */
+export function describeChainError(error: unknown): string {
+  if (isRateLimited(error)) return "Solana devnet's public RPC is busy and limited this server's requests. Please try again in a minute.";
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Every 2 s: the public RPC limits requests per IP, so confirmation checks stay light. */
+const POLL_MS = 2000;
 
 async function waitForConfirmation(rpc: DevnetRpc, signature: Signature, timeoutMs = 90_000): Promise<void> {
   const started = Date.now();
@@ -70,6 +118,15 @@ async function waitForConfirmation(rpc: DevnetRpc, signature: Signature, timeout
   throw new Error(`Transaction ${signature} was not confirmed within ${timeoutMs / 1000} seconds`);
 }
 
+function alreadyProcessed(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    if (isSolanaError(current, SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED)) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /** Builds, signs, sends and confirms one transaction. Returns its signature (the tx id). */
 export async function sendInstructions(rpc: DevnetRpc, feePayer: TransactionSigner, instructions: Instruction[]): Promise<Signature> {
   const { value: blockhash } = await rpc.getLatestBlockhash().send();
@@ -81,7 +138,12 @@ export async function sendInstructions(rpc: DevnetRpc, feePayer: TransactionSign
   );
   const signed = await signTransactionMessageWithSigners(message);
   const signature = getSignatureFromTransaction(signed);
-  await rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: "base64" }).send();
+  try {
+    await rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: "base64" }).send();
+  } catch (error) {
+    // A retried send of the same signed transaction can find it already processed: that is success.
+    if (!alreadyProcessed(error)) throw error;
+  }
   await waitForConfirmation(rpc, signature);
   return signature;
 }
@@ -263,9 +325,13 @@ export async function createHeiShareMint(rpc: DevnetRpc, issuer: KeyPairSigner, 
   }
 }
 
-/** KYC allowlist: open the investor's (frozen) token account. Without this it stays frozen. */
+/**
+ * KYC allowlist: open the investor's (frozen) token account. Without this it stays frozen.
+ * Already open: nothing is sent (signature null), so a retried sale does not fail here.
+ */
 export async function allowlistInvestor(rpc: DevnetRpc, issuer: KeyPairSigner, mint: Address, investor: Address) {
   const account = await tokenAccount(investor, mint);
+  if ((await readTokenAccount(rpc, account))?.state === "initialized") return { account, signature: null };
   const signature = await sendInstructions(rpc, issuer, [
     await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner: investor, mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
     getThawAccountInstruction({ account, mint, owner: issuer }),
@@ -273,9 +339,10 @@ export async function allowlistInvestor(rpc: DevnetRpc, issuer: KeyPairSigner, m
   return { account, signature };
 }
 
-/** Opens a token account without thawing it: for a wallet that has not passed KYC. */
+/** Opens a token account without thawing it: for a wallet that has not passed KYC. Nothing is sent if it exists. */
 export async function openFrozenAccount(rpc: DevnetRpc, issuer: KeyPairSigner, mint: Address, wallet: Address) {
   const account = await tokenAccount(wallet, mint);
+  if (await readTokenAccount(rpc, account)) return { account, signature: null };
   const signature = await sendInstructions(rpc, issuer, [
     await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: issuer, owner: wallet, mint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }),
   ]);
