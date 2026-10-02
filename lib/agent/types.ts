@@ -2,6 +2,7 @@
 // agent knows about one user's case) and the messages exchanged with the model.
 
 import type { Asset, Photo, PiiItem } from "../assets/types";
+import type { OnchainRecord } from "../chain/adapter";
 import type { AssetPassport, Receipt } from "../recommend/passport";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import type { Recommendation } from "../recommend/types";
@@ -21,8 +22,8 @@ export type Goal = {
   age62Plus?: boolean;
 };
 
-/** Steps of CLAUDE.md §5 built so far: goal, capture (+ verify, value), compare, prepare. */
-export type Stage = "goal" | "capture" | "compare" | "prepare";
+/** Steps of CLAUDE.md §5 built so far: goal, capture (+ verify, value), compare, prepare, execute. */
+export type Stage = "goal" | "capture" | "compare" | "prepare" | "execute";
 
 export type ToolCall = {
   id: string; // our id, unique within the case
@@ -66,7 +67,12 @@ export type CaseFile = {
   pii: Record<string, PiiItem>; // personal data, referenced by key from assets; never logged
   photos: Record<string, Photo>; // uploaded photos (may show serial numbers); off-chain
   recommendation?: Recommendation; // the latest comparison (step 5)
-  handoff?: { termSheet?: HeiTermSheet; passports: AssetPassport[]; receipt: Receipt }; // step 6, off-chain
+  handoff?: {
+    termSheet?: HeiTermSheet;
+    passports: AssetPassport[];
+    receipt: Receipt;
+    onchain?: { receipt?: OnchainRecord; heiShares?: OnchainRecord & { treasury: string }; watchToken?: OnchainRecord & { owner: string } };
+  }; // steps 6 (off-chain) and 7 (on-chain, devnet)
   messages: AgentMessage[];
   pendingApproval: PendingApproval | null;
   events: CaseEvent[];

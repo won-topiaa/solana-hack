@@ -13,6 +13,9 @@ import { addPhoto, mimeTypeFromFileName } from "../lib/agent/photos";
 import { createAgentTools } from "../lib/agent/tools";
 import { createGeminiVision } from "../lib/integrations/vision";
 import { getRegistry } from "../lib/params/load";
+import { createDevnetChain } from "../lib/chain/devnet";
+import { createDevnetRpc } from "../lib/chain/solana";
+import { loadOrCreateWallet } from "../lib/chain/wallets";
 import { createDemoPropertySource, createMemoryStore, createRentcastSource, withCache } from "../lib/integrations/rentcast";
 import { createFileStore } from "../lib/integrations/rentcastCache";
 import { createPlaidSandboxSource } from "../lib/integrations/plaid";
@@ -40,11 +43,17 @@ async function main() {
       propertySource,
       mortgageSource,
       vision: createGeminiVision({ apiKey, model }),
+      // Devnet only. The wallets live in the git-ignored .wallets/devnet (npm run chain:wallets).
+      chain: createDevnetChain(createDevnetRpc(process.env.SOLANA_RPC_URL || undefined), {
+        issuer: await loadOrCreateWallet("issuer"),
+        user: await loadOrCreateWallet("user"),
+      }),
     }),
   };
   console.log(`Model: ${model}. Property data: ${useRentcast ? "RentCast (cached in .cache/rentcast)" : "demo data (data/demo/properties.json)"}.`);
   console.log(`Mortgage: typed by the user${mortgageSource ? ", or Plaid sandbox (test data) after approval" : ""}.`);
   console.log("Watch photos: type /photo followed by a file path (PNG, JPEG, WEBP, HEIC).");
+  console.log("On-chain steps: Solana devnet only, each after your approval.");
   console.log("Development chat: use made-up personas for demos.\n");
 
   const scripted = process.argv.slice(2);

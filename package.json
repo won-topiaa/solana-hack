@@ -14,10 +14,16 @@
     "test:watch": "vitest",
     "params:check": "tsx scripts/check-params.ts",
     "params:refresh": "tsx --env-file-if-exists=.env.local scripts/refresh-params.ts",
-    "agent:chat": "tsx --env-file-if-exists=.env.local scripts/agent-chat.ts"
+    "agent:chat": "tsx --env-file-if-exists=.env.local scripts/agent-chat.ts",
+    "chain:wallets": "tsx --env-file-if-exists=.env.local scripts/chain-wallets.ts",
+    "chain:demo": "tsx --env-file-if-exists=.env.local scripts/chain-demo.ts"
   },
   "dependencies": {
     "@google/genai": "^2.25.0",
+    "@solana-program/memo": "^0.15.0",
+    "@solana-program/system": "^0.15.0",
+    "@solana-program/token-2022": "^0.19.0",
+    "@solana/kit": "^8.4.0",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8"

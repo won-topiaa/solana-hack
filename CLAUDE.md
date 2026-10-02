@@ -63,7 +63,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | Agent role | Neutral comparison + connector; partners are issuer/custodian (decided) |
 | HEI pricing | discount 33.3%, fee 3.9% (min $2,000), investor return cap 20%/yr, term 5–30 yrs (default 10), max investment 24.99% of home value (our design cap, calibrated from Hometap) (decided) |
 | HELOC-first rule | If repayment planned within 3 years, show HELOC / home equity loan first (decided) |
-| Chain / track | **Solana** (decided 2026-10-01): devnet for the demo, Solana track (Rules §14(e)); Token-2022 + Solana Agent Kit |
+| Chain / track | **Solana** (decided 2026-10-01): devnet for the demo, Solana track (Rules §14(e)); Token-2022. Libraries: official `@solana/kit` + `@solana-program/{token-2022,system,memo}` (proposed 2026-10-02, owner to confirm: Solana Agent Kit v2 does not document DefaultAccountState, freeze/thaw or memo) |
 | Arena category | Tentative: Real World Assets (RWA); alternative: AI Platforms / Agents |
 | Project name | **TBD** (repo and package use the working name `rwa-liquidity-agent` until decided) |
 | LLM provider | **Google Gemini API** (decided 2026-10-01), SDK `@google/genai`, default model `gemini-3.8-flash` (function calling + image input), key `GEMINI_API_KEY` in `.env.local` |
@@ -82,7 +82,7 @@ partner roles on devnet and **labels every simulated partner step as "Simulated"
 | 4 Value | Home: AVM range + error band. Watch: price table + box/papers note | RentCast, `data/params.json` | `Valuation` |
 | 5 Compare | Build every `PathOption` per lane + cross-lane combos; apply rules (§8.4) | `/lib/calc`, params | `Recommendation` |
 | 6 Prepare | Term sheet, **Asset Passport**, **Recommendation Receipt** | hashing | handoff bundle |
-| 7 Execute (approval gate) | Token design → mint → primary sale, or route to buyer/lender/marketplace | Solana Agent Kit (Token-2022, Metaplex) | tx ids |
+| 7 Execute (approval gate) | Token design → mint → primary sale, or route to buyer/lender/marketplace. Once the receipt is on-chain the chosen path is final for the case | Token-2022 on Solana devnet (`/lib/chain`) | tx ids |
 | 8 Monitor & settle | Due-date alerts; settlement value; capped payout; distribute; burn; redemption | settlement script | settlement record |
 
 Approval gates (UI confirmation + wallet signature): minting, any token/USDC transfer, sending a receipt on-chain, and any action that would contact a partner in production.
@@ -99,7 +99,7 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
      |          watchRegister.check (simulated), params.get, calc.*, passport.build, receipt.hash
      |-- /lib/calc      pure, tested money math (HEI, settlement, HELOC compare, watch paths, cross-lane)
      |-- /lib/params    loads data/params.json, checks staleness, exposes registry_version
-     '-- /lib/chain     ChainAdapter (Solana devnet): mintHeiShares, mintWatchNft, recordReceipt, settle
+     '-- /lib/chain     ChainService (Solana devnet): recordReceipt, issueHeiShares, issueWatchToken (settlement: M8)
 ```
 
 ---
@@ -113,12 +113,12 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /lib/calc                 hei.ts, settlement.ts, compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
 /lib/recommend            recommend.ts (paths + rules + freshness gate), realEstate.ts, watches.ts, display.ts, termSheet.ts, passport.ts (passport + receipt), canonical.ts, personas.ts
-/lib/chain                adapter.ts, solana.ts, mock.ts
+/lib/chain                adapter.ts (ChainService), devnet.ts, solana.ts (kit + program clients), wallets.ts (.wallets/devnet, git-ignored), fake.ts (tests)
 /lib/integrations         rentcast.ts (live + demo source + cache), rentcastCache.ts (disk cache), plaid.ts (Liabilities, sandbox; approval-gated tool), vision.ts (Gemini image + JSON output), watchRegister.mock.ts (simulated, approval-gated)
 /lib/assets               types.ts (assets, PII items, photos), ownerMatch.ts, serial.ts (salted serial hash), watchPrices.ts
 /lib/format.ts            display formatting (formatUsd): tools return finished text, the model quotes it
 /data/params.json         parameter registry (source of truth for every number)
-/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape; watch-prices.json = made-up demo price table; personas.json = demo personas A, B, B2, C (§8.6)
+/data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape; watch-prices.json = made-up demo price table; personas.json = demo personas A, B, B2, C, D (§8.6)
 /scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS), check-params.ts, check-product-terms.ts (propose only)
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
 THIRD_PARTY.md, .env.example
@@ -274,11 +274,13 @@ Run from the repo root (`rwa-liquidity-agent/`). Requires Node.js 22.12+ for Vit
 | `npm run params:check` | Freshness of every registry value today (or `-- YYYY-MM-DD`) |
 | `npm run params:refresh` | Update market values from FRED (needs `FRED_API_KEY` in `.env.local`; `-- --dry-run` to preview) |
 | `npm run agent:chat` | Chat with the agent in the terminal (Gemini; `-- "msg1" "msg2"` replays messages). `/photo <path>` uploads a watch photo. Uses RentCast when `RENTCAST_API_KEY` is set (cached 30 days in git-ignored `.cache/rentcast/`), otherwise or with `PROPERTY_DATA_SOURCE=demo` the demo homes in `data/demo/properties.json`. With `PLAID_CLIENT_ID` + `PLAID_SECRET` it can also read a sandbox mortgage after you approve. Made-up personas for demos |
+| `npm run chain:wallets` | Create/show the devnet demo wallets and try a devnet airdrop for the fee payers |
+| `npm run chain:demo` | M7 on devnet through the agent tools: persona B receipt + HEI shares + KYC allowlist, persona A receipt + watch token (asks first; `-- --yes`) |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |
 
-Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`), tsx 4 (runs `scripts/*.ts`), @google/genai 2 (Gemini API).
+Stack: Next.js 16.3.8 (App Router, Turbopack), React 19.2, TypeScript 5.9, Tailwind CSS 4, ESLint 9, Vitest 5 (config `vitest.config.mts`), tsx 4 (runs `scripts/*.ts`), @google/genai 2 (Gemini API), @solana/kit 8 + @solana-program clients (devnet).
 
 ## 12. Definition of done
 Public repo with OSS license; deployed demo; English README (problem, how it works, why blockchain, what is simulated, trust assumptions, how to run); demo and pitch videos per the Arena form; all members registered on colosseum.com; team leader submits in the Arena before the deadline.

@@ -168,3 +168,14 @@ describe("display text", () => {
     expect(lines.at(-1)).toBe("This is not investment or financial advice.");
   });
 });
+
+describe("a watch flagged as stolen", () => {
+  it("is left out of every path", () => {
+    const base = personaCase("A", now);
+    const flagged = { ...base, assets: base.assets.map((asset) => (asset.id === "watch-2" ? { ...asset, theftCheck: "flagged" as const } : asset)) };
+    const result = recommend(flagged, testRegistry(), TODAY, now);
+    if (result.status !== "ok") throw new Error(`expected ok, got ${result.status}`);
+    expect(result.recommendation.options.filter((item) => item.assetIds.includes("watch-2"))).toEqual([]);
+    expect(result.recommendation.options.some((item) => item.assetIds.includes("watch-1"))).toBe(true);
+  });
+});

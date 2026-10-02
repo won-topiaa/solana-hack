@@ -33,7 +33,10 @@ export function watchLabel(watch: WatchAsset): string {
 /** The valued assets of a case, as the comparison sees them. */
 function valuedAssets(caseFile: CaseFile): { home?: RealEstateAsset; watches: WatchAsset[] } {
   const home = caseFile.assets.find((asset): asset is RealEstateAsset => asset.kind === "real_estate" && asset.avm !== undefined);
-  const watches = caseFile.assets.filter((asset): asset is WatchAsset => asset.kind === "watch" && asset.marketValue !== undefined);
+  // A watch flagged as stolen cannot be sold, pledged or vaulted, so it is left out of every path.
+  const watches = caseFile.assets.filter(
+    (asset): asset is WatchAsset => asset.kind === "watch" && asset.marketValue !== undefined && asset.theftCheck !== "flagged",
+  );
   return { home, watches };
 }
 

@@ -1,0 +1,36 @@
+// Devnet wallets for the demo, kept in the git-ignored .wallets/devnet folder as
+// 64-byte secret key arrays (the Solana CLI keypair format). Devnet only: these
+// keys must never hold real funds.
+
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  createKeyPairSignerFromBytes,
+  createKeyPairSignerFromPrivateKeyBytes,
+  getBase58Encoder,
+  type KeyPairSigner,
+} from "@solana/kit";
+
+export const WALLET_DIR = ".wallets/devnet";
+
+/** issuer: plays the partners (HEI issuer, watch vault) on devnet; user: the homeowner or watch owner. */
+export const DEMO_WALLETS = ["issuer", "user", "investor-kyc", "investor-no-kyc"] as const;
+
+export async function loadOrCreateWallet(name: string, dir: string = WALLET_DIR): Promise<KeyPairSigner> {
+  if (!/^[a-z0-9-]+$/.test(name)) throw new Error(`Bad wallet name: ${name}`);
+  const file = join(dir, `${name}.json`);
+  if (existsSync(file)) {
+    const bytes = Uint8Array.from(JSON.parse(readFileSync(file, "utf8")) as number[]);
+    return createKeyPairSignerFromBytes(bytes);
+  }
+  // A new key: 32 random bytes, then the public key, as the CLI stores it.
+  const seed = randomBytes(32);
+  const signer = await createKeyPairSignerFromPrivateKeyBytes(seed);
+  const secretKey = new Uint8Array(64);
+  secretKey.set(seed, 0);
+  secretKey.set(getBase58Encoder().encode(signer.address), 32);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify(Array.from(secretKey)), { mode: 0o600 });
+  return createKeyPairSignerFromBytes(secretKey);
+}

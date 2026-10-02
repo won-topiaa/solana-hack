@@ -3,9 +3,10 @@ import { createDemoPropertySource } from "../integrations/rentcast";
 import { testRegistry } from "../params/test-fixtures";
 import { personaCase } from "../recommend/personas";
 import type { LlmReply } from "./llm";
-import { sendUserMessage } from "./orchestrator";
+import { resolveApproval, sendUserMessage } from "./orchestrator";
 import { createScriptedLlm } from "./scripted";
 import { createAgentTools } from "./tools";
+import type { CaseFile } from "./types";
 
 const now = () => new Date("2026-10-01T15:00:00Z");
 const tools = createAgentTools({ registry: testRegistry(), propertySource: createDemoPropertySource(() => "2026-10-01") });
@@ -63,6 +64,14 @@ describe("compare and prepare, through the agent", () => {
   });
 });
 
+/** The demo watches after the (simulated) stolen-watch check, which a vault requires. */
+function withRegistryChecked(caseFile: CaseFile): CaseFile {
+  return {
+    ...caseFile,
+    assets: caseFile.assets.map((asset) => (asset.kind === "watch" ? { ...asset, theftCheck: "simulated_clear" as const } : asset)),
+  };
+}
+
 describe("the user chooses a path", () => {
   it("asks for a choice when both assets work, then prepares the one the user picked", async () => {
     const llm = createScriptedLlm([
@@ -90,7 +99,8 @@ describe("the user chooses a path", () => {
       say("Prepared."),
     ]);
     const deps = { llm, tools, now };
-    const compared = await sendUserMessage(personaCase("A", now()), "Compare.", deps);
+    const checked = withRegistryChecked(personaCase("A", now()));
+    const compared = await sendUserMessage(checked, "Compare.", deps);
     const prepared = await sendUserMessage(compared.caseFile, "I want to tokenize my sport watch.", deps);
     expect(prepared.caseFile.handoff?.receipt).toMatchObject({ recommendedOptionId: "watch-plan", selectedOptionId: "w-vault-token-watch-1" });
     const text = JSON.stringify(llm.requests.at(-1)?.messages.at(-1));
@@ -105,5 +115,41 @@ describe("the user chooses a path", () => {
     const refused = await sendUserMessage(compared.caseFile, "Prepare the HELOC.", deps);
     expect(refused.caseFile.handoff).toBeUndefined();
     expect(JSON.stringify(llm.requests.at(-1)?.messages.at(-1))).toContain("cannot be prepared");
+  });
+});
+
+describe("the watch vault path", () => {
+  it("can still be chosen after the documents were prepared for another path", async () => {
+    const llm = createScriptedLlm([
+      callTool("compare_paths"),
+      say("ok"),
+      callTool("prepare_documents"),
+      say("Prepared the recommended plan."),
+      callTool("prepare_documents", { optionId: "w-vault-token-watch-1" }),
+      say("The registry check comes first."),
+      callTool("record_watch", { assetId: "watch-1", serial: "DW7731842" }),
+      callTool("check_watch_registry", { assetId: "watch-1" }),
+      say("Checked."),
+      callTool("prepare_documents", { optionId: "w-vault-token-watch-1" }),
+      say("Prepared."),
+    ]);
+    const deps = { llm, tools, now };
+    let file = (await sendUserMessage(personaCase("A", now()), "Compare.", deps)).caseFile;
+    file = (await sendUserMessage(file, "Prepare.", deps)).caseFile;
+    file = (await sendUserMessage(file, "Actually, tokenize my sport watch.", deps)).caseFile;
+    const asked = await sendUserMessage(file, "The serial is DW7731842.", deps);
+    expect(asked.awaitingApproval?.summary).toContain("stolen-watch registry"); // offered after the documents
+    file = (await resolveApproval(asked.caseFile, asked.awaitingApproval!.id, true, deps)).caseFile;
+    file = (await sendUserMessage(file, "Tokenize it.", deps)).caseFile;
+    expect(file.handoff?.receipt.selectedOptionId).toBe("w-vault-token-watch-1");
+  });
+
+  it("needs the stolen-watch check before the documents can be prepared", async () => {
+    const llm = createScriptedLlm([callTool("compare_paths"), say("Compared."), callTool("prepare_documents", { optionId: "w-vault-token-watch-1" }), say("Run the check first.")]);
+    const deps = { llm, tools, now };
+    const compared = await sendUserMessage(personaCase("A", now()), "Compare.", deps);
+    const refused = await sendUserMessage(compared.caseFile, "Tokenize it.", deps);
+    expect(refused.caseFile.handoff).toBeUndefined();
+    expect(JSON.stringify(llm.requests.at(-1)?.messages.at(-1))).toContain("Run the stolen-watch registry check first");
   });
 });

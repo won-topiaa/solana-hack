@@ -21,6 +21,8 @@ import { hashOf } from "../recommend/canonical";
 import { describeRecommendation } from "../recommend/display";
 import { buildPassport, buildReceipt, type AssetPassport } from "../recommend/passport";
 import { isSelectable } from "../recommend/watches";
+import type { ChainService } from "../chain/adapter";
+import { receiptMemo } from "../chain/solana";
 import { assetSummaries, realEstateTerms, recommend, watchLabel } from "../recommend/recommend";
 import { buildHeiTermSheet, describeTermSheet, type HeiTermSheet } from "../recommend/termSheet";
 
@@ -36,6 +38,13 @@ export type AgentTool = {
   describeForApproval?: (args: Record<string, unknown>) => string;
   run: (args: Record<string, unknown>, context: ToolContext) => ToolOutcome | Promise<ToolOutcome>;
 };
+
+/**
+ * Until something is on-chain the user may still change the goal and the assets, even
+ * after the documents are prepared (compare_paths then starts over). Once the receipt is
+ * on-chain (stage "execute") the recorded choice is final.
+ */
+const EDITABLE_STAGES: Stage[] = ["capture", "compare", "prepare"];
 
 export const recordGoal: AgentTool = {
   declaration: {
@@ -65,7 +74,7 @@ export const recordGoal: AgentTool = {
       required: ["cashNeededUsd", "neededBy"],
     },
   },
-  stages: ["goal", "capture", "compare"],
+  stages: ["goal", ...EDITABLE_STAGES],
   requiresApproval: false,
   run(args, { caseFile, today }) {
     const check = checkGoal(args, today);
@@ -112,7 +121,7 @@ export function createLookupHome(source: PropertyDataSource): AgentTool {
         required: ["address", "titleName"],
       },
     },
-    stages: ["capture", "compare"],
+    stages: EDITABLE_STAGES,
     requiresApproval: false,
     async run(args, { caseFile }) {
       const address = typeof args.address === "string" ? args.address.trim() : "";
@@ -189,7 +198,7 @@ export const recordMortgage: AgentTool = {
       required: ["assetId", "balanceUsd"],
     },
   },
-  stages: ["capture", "compare"],
+  stages: EDITABLE_STAGES,
   requiresApproval: false,
   run(args, { caseFile }) {
     const balance = args.balanceUsd;
@@ -226,7 +235,7 @@ export function createConnectMortgage(source: MortgageDataSource): AgentTool {
         required: ["assetId"],
       },
     },
-    stages: ["capture", "compare"],
+    stages: EDITABLE_STAGES,
     requiresApproval: true,
     describeForApproval: () => "Connect a lender account through Plaid (sandbox test data) to read the mortgage balance",
     async run(args, { caseFile }) {
@@ -322,7 +331,7 @@ export function createReadWatchPhotos(vision: WatchVision): AgentTool {
         required: ["photoIds"],
       },
     },
-    stages: ["capture", "compare"],
+    stages: EDITABLE_STAGES,
     requiresApproval: false,
     async run(args, { caseFile }) {
       const ids = Array.isArray(args.photoIds) ? args.photoIds.filter((id): id is string => typeof id === "string") : [];
@@ -385,7 +394,7 @@ export const recordWatch: AgentTool = {
       },
     },
   },
-  stages: ["capture", "compare"],
+  stages: EDITABLE_STAGES,
   requiresApproval: false,
   run(args, { caseFile }) {
     const problems: string[] = [];
@@ -440,7 +449,7 @@ export const checkWatchRegistry: AgentTool = {
       "In this demo the check is simulated and contacts no one. Quote the display text exactly.",
     parameters: { type: "object", properties: { assetId: { type: "string" } }, required: ["assetId"] },
   },
-  stages: ["capture", "compare"],
+  stages: EDITABLE_STAGES,
   requiresApproval: true,
   describeForApproval: () =>
     "Check the watch's serial number against a stolen-watch registry (simulated in this demo: nothing is sent)",
@@ -480,7 +489,7 @@ export const setKeepAssets: AgentTool = {
       required: ["assetIds"],
     },
   },
-  stages: ["capture", "compare"],
+  stages: EDITABLE_STAGES,
   requiresApproval: false,
   run(args, { caseFile }) {
     if (!caseFile.goal) return { output: { saved: false, problem: "Save the goal first." }, caseFile };
@@ -508,7 +517,7 @@ export function createComparePaths(registry: Registry): AgentTool {
         "Quote the display text exactly; explain only with the reasons it gives.",
       parameters: { type: "object", properties: {} },
     },
-    stages: ["capture", "compare"],
+    stages: EDITABLE_STAGES,
     requiresApproval: false,
     run(_args, { caseFile, today, now }) {
       const result = recommend(caseFile, registry, today, now);
@@ -566,6 +575,14 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
       if (!isSelectable(chosen)) {
         return { output: { prepared: false, problem: `${chosen.label} cannot be prepared: ${chosen.whyNotSuitable ?? "it is shown for information only"}` }, caseFile };
       }
+      // A vault takes a watch only after a passing stolen-watch check, so the passport must already include it.
+      const tokenizesWatch = chosen.id.startsWith("w-vault-token-");
+      const vaultedWatch = tokenizesWatch
+        ? caseFile.assets.find((asset) => asset.id === chosen.assetIds[0] && asset.kind === "watch")
+        : undefined;
+      if (vaultedWatch?.kind === "watch" && vaultedWatch.theftCheck !== "clear" && vaultedWatch.theftCheck !== "simulated_clear") {
+        return { output: { prepared: false, problem: "Run the stolen-watch registry check first (check_watch_registry); a vault needs it." }, caseFile };
+      }
       const recommended = recommendation.options.find((option) => option.id === recommendation.chosenId);
 
       let file = caseFile;
@@ -591,7 +608,7 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
         chosen.id === recommendation.chosenId
           ? `Prepared for the recommended path: ${chosen.label}.`
           : `Prepared for the path you chose: ${chosen.label}. ${recommended ? `The recommendation was ${recommended.label}; ` : ""}the receipt records both.`;
-      const tokenDesign = chosen.id.startsWith("w-vault-token-")
+      const tokenDesign = tokenizesWatch
         ? ["Token design: a 1-of-1 token (supply 1, no decimals) that stands for the vaulted watch; redeeming it releases the watch. Vault intake is simulated in this demo."]
         : [];
       const lines = [
@@ -600,7 +617,9 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
         ...tokenDesign,
         ...passports.map((passport) => `Asset passport for ${assetLabel(file, passport.assetId)}: hash ${hashOf(passport)}.`),
         `Recommendation receipt: recommendation hash ${receipt.recommendationHash}; passports hash ${receipt.passportHash}; parameter registry ${receipt.registryVersion}.`,
-        "Recording the receipt on Solana and issuing tokens come in a later step and need your approval and wallet signature.",
+        chosen.id === "re-hei" || tokenizesWatch
+          ? "Recording the receipt on Solana and issuing tokens are separate steps, and each needs your approval."
+          : "Recording the receipt on Solana is a separate step and needs your approval.",
       ];
       return {
         output: { prepared: true, display: lines.join("\n") },
@@ -617,12 +636,157 @@ function inputsChanged(caseFile: CaseFile): boolean {
   return hashOf(rec.inputs.goal) !== hashOf(caseFile.goal) || hashOf(rec.inputs.assets) !== hashOf(assetSummaries(caseFile));
 }
 
-/** All tools so far (M6: goal, home, mortgage, watches, compare, prepare). Optional services add their tools. */
+// ---- On-chain on Solana devnet (M7). Every one of these needs the user's approval. ----
+
+/**
+ * The goal and assets can still change after the documents are prepared; then the
+ * documents no longer describe the case and must not go on-chain.
+ */
+function staleDocuments(caseFile: CaseFile): ToolOutcome {
+  return { output: { done: false, problem: "The goal or assets changed after the documents were prepared. Call compare_paths and prepare_documents again." }, caseFile };
+}
+
+function chainFailure(caseFile: CaseFile, error: unknown): ToolOutcome {
+  const message = error instanceof Error ? error.message : String(error);
+  return { output: { done: false, problem: `The devnet transaction failed: ${message}. Is the issuer wallet funded? (npm run chain:wallets)` }, caseFile };
+}
+
+export function createRecordReceipt(chain: ChainService): AgentTool {
+  return {
+    declaration: {
+      name: "record_receipt_onchain",
+      description:
+        "Write the recommendation receipt (hashes only, no personal data) to Solana devnet, signed by the user's wallet. " +
+        "The app asks the user to approve first. Quote the display text exactly.",
+      parameters: { type: "object", properties: {} },
+    },
+    stages: ["prepare", "execute"],
+    requiresApproval: true,
+    describeForApproval: () => "Write the recommendation receipt (hashes only) to Solana devnet, signed by your wallet",
+    async run(_args, { caseFile }) {
+      const handoff = caseFile.handoff;
+      if (!handoff) return { output: { done: false, problem: "Prepare the documents first." }, caseFile };
+      if (inputsChanged(caseFile)) return staleDocuments(caseFile);
+      if (handoff.onchain?.receipt) {
+        return { output: { done: true, display: `The receipt is already on Solana devnet: ${handoff.onchain.receipt.explorerUrls[0]}` }, caseFile };
+      }
+      try {
+        const record = await chain.recordReceipt(receiptMemo(handoff.receipt));
+        const receipt = { ...handoff.receipt, txId: record.signatures[0] };
+        return {
+          output: {
+            done: true,
+            display: `Receipt recorded on Solana devnet in transaction ${record.signatures[0]}. Check it: ${record.explorerUrls[0]} . It holds only hashes, the parameter registry version and the chosen path id.`,
+          },
+          caseFile: { ...caseFile, handoff: { ...handoff, receipt, onchain: { ...handoff.onchain, receipt: record } }, stage: "execute" },
+        };
+      } catch (error) {
+        return chainFailure(caseFile, error);
+      }
+    },
+  };
+}
+
+export function createIssueHeiShares(chain: ChainService): AgentTool {
+  return {
+    declaration: {
+      name: "issue_hei_shares",
+      description:
+        "For an HEI: create the HEI share tokens on Solana devnet, issued by the simulated partner into its treasury for the " +
+        "primary sale. Token accounts start frozen; only KYC-approved wallets are opened. Needs the user's approval and the " +
+        "receipt on-chain first. Quote the display text exactly.",
+      parameters: { type: "object", properties: {} },
+    },
+    stages: ["prepare", "execute"],
+    requiresApproval: true,
+    describeForApproval: () => "Create the HEI share tokens on Solana devnet (accounts frozen until KYC; the partner is simulated)",
+    async run(_args, { caseFile }) {
+      const handoff = caseFile.handoff;
+      const sheet = handoff?.termSheet;
+      if (!handoff || !sheet || handoff.receipt.selectedOptionId !== "re-hei") {
+        return { output: { done: false, problem: "This is only for a prepared HEI path." }, caseFile };
+      }
+      if (inputsChanged(caseFile)) return staleDocuments(caseFile);
+      if (!handoff.onchain?.receipt) return { output: { done: false, problem: "Record the receipt on-chain first (record_receipt_onchain)." }, caseFile };
+      if (handoff.onchain.heiShares) return { output: { done: true, display: `The HEI share tokens already exist: ${handoff.onchain.heiShares.explorerUrls.at(-1)}` }, caseFile };
+      const passport = handoff.passports.find((item) => item.assetId === sheet.assetId);
+      if (!passport) return { output: { done: false, problem: "The home's passport is missing; prepare the documents again." }, caseFile };
+      try {
+        const record = await chain.issueHeiShares({
+          assetId: sheet.assetId,
+          tokenSupply: sheet.tokenSupply,
+          passportHash: hashOf(passport),
+          recommendationHash: handoff.receipt.recommendationHash,
+        });
+        return {
+          output: {
+            done: true,
+            display:
+              `HEI share tokens created on Solana devnet: ${sheet.tokenSupply.toLocaleString("en-US")} tokens in the issuer's treasury ` +
+              `for the primary sale (the issuer is a simulated partner). New token accounts start frozen; only KYC-approved wallets are opened. ` +
+              `Token: ${record.explorerUrls.at(-1)} . Transactions: ${record.explorerUrls.slice(0, -1).join(" , ")} .`,
+          },
+          caseFile: { ...caseFile, handoff: { ...handoff, onchain: { ...handoff.onchain, heiShares: record } }, stage: "execute" },
+        };
+      } catch (error) {
+        return chainFailure(caseFile, error);
+      }
+    },
+  };
+}
+
+export function createIssueWatchToken(chain: ChainService): AgentTool {
+  return {
+    declaration: {
+      name: "issue_watch_token",
+      description:
+        "For the watch tokenization path: record the simulated vault intake and create the watch's 1-of-1 token in the " +
+        "user's wallet on Solana devnet. Needs the user's approval and the receipt on-chain first. Quote the display text exactly.",
+      parameters: { type: "object", properties: {} },
+    },
+    stages: ["prepare", "execute"],
+    requiresApproval: true,
+    describeForApproval: () =>
+      "Record the simulated vault intake and create your watch's 1-of-1 token on Solana devnet",
+    async run(_args, { caseFile }) {
+      const handoff = caseFile.handoff;
+      const selected = handoff?.receipt.selectedOptionId ?? "";
+      if (!handoff || !selected.startsWith("w-vault-token-")) {
+        return { output: { done: false, problem: "This is only for a prepared watch tokenization path." }, caseFile };
+      }
+      if (inputsChanged(caseFile)) return staleDocuments(caseFile);
+      if (!handoff.onchain?.receipt) return { output: { done: false, problem: "Record the receipt on-chain first (record_receipt_onchain)." }, caseFile };
+      if (handoff.onchain.watchToken) return { output: { done: true, display: `The watch token already exists: ${handoff.onchain.watchToken.explorerUrls.at(-1)}` }, caseFile };
+      const assetId = selected.replace("w-vault-token-", "");
+      const passport = handoff.passports.find((item) => item.assetId === assetId);
+      if (!passport) return { output: { done: false, problem: "The watch's passport is missing; prepare the documents again." }, caseFile };
+      try {
+        const record = await chain.issueWatchToken({ assetId, passportHash: hashOf(passport), recommendationHash: handoff.receipt.recommendationHash });
+        return {
+          output: {
+            done: true,
+            display:
+              "Vault intake: SIMULATED (no watch was shipped or stored). " +
+              `Your watch's 1-of-1 token was created in your wallet on Solana devnet: ${record.explorerUrls.at(-1)} . ` +
+              "Minting is closed, so no second token can ever be made. " +
+              `Transactions: ${record.explorerUrls.slice(0, -1).join(" , ")} .`,
+          },
+          caseFile: { ...caseFile, handoff: { ...handoff, onchain: { ...handoff.onchain, watchToken: record } }, stage: "execute" },
+        };
+      } catch (error) {
+        return chainFailure(caseFile, error);
+      }
+    },
+  };
+}
+
+/** All tools so far (M7: goal, assets, compare, prepare, on-chain). Optional services add their tools. */
 export function createAgentTools(services: {
   registry: Registry;
   propertySource: PropertyDataSource;
   mortgageSource?: MortgageDataSource;
   vision?: WatchVision;
+  chain?: ChainService;
 }): AgentTool[] {
   return [
     recordGoal,
@@ -635,5 +799,8 @@ export function createAgentTools(services: {
     setKeepAssets,
     createComparePaths(services.registry),
     createPrepareDocuments(services.registry),
+    ...(services.chain
+      ? [createRecordReceipt(services.chain), createIssueHeiShares(services.chain), createIssueWatchToken(services.chain)]
+      : []),
   ];
 }

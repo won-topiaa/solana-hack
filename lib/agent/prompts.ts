@@ -55,10 +55,28 @@ const COMPARE_STEP = `Step 3 of the process: compare and recommend.
 - Nothing is signed, sent or recorded in this step.`;
 
 const PREPARE_STEP = `Step 4 of the process: the handoff documents are prepared.
-- Quote prepare_documents' display text exactly. It already says what comes next; do not repeat it.
+- Quote prepare_documents' display text exactly. It already says what comes next; do not repeat it.{{CHAIN_OPTION}}
 - If the user changes anything, use the matching tool and call compare_paths again.`;
 
-const STEPS: Record<Stage, string> = { goal: GOAL_STEP, capture: CAPTURE_STEP, compare: COMPARE_STEP, prepare: PREPARE_STEP };
+const EXECUTE_STEP = `Step 5 of the process: on-chain steps on Solana devnet.
+- Quote each tool's display text exactly, including the explorer links.
+- Everything here runs on devnet with simulated partners; say so once.
+- One step at a time, and only when the user wants it: the app asks for approval before each.{{CHAIN_OPTION}}
+- The receipt on-chain makes the chosen path final for this case. If the user wants to change
+  the goal, the assets or the path, say this case cannot change any more; a new case starts over.`;
+
+const CHAIN_OPTION = `
+- On-chain steps, in this order, each only if the user wants it (the app asks for approval):
+  first record_receipt_onchain; then issue_hei_shares for an HEI, or issue_watch_token for a
+  watch tokenization path.`;
+
+const STEPS: Record<Stage, string> = {
+  goal: GOAL_STEP,
+  capture: CAPTURE_STEP,
+  compare: COMPARE_STEP,
+  prepare: PREPARE_STEP,
+  execute: EXECUTE_STEP,
+};
 
 const CONNECT_OPTION = `
   The user may instead connect their lender account (call connect_mortgage_account; the app
@@ -73,7 +91,9 @@ export function systemPrompt(stage: Stage, today: string, offeredTools: string[]
   const step = STEPS[stage].replace(
     "{{CONNECT_OPTION}}",
     offeredTools.includes("connect_mortgage_account") ? CONNECT_OPTION : "",
-  ).replace("{{PHOTO_OPTION}}", offeredTools.includes("read_watch_photos") ? PHOTO_OPTION : "");
+  )
+    .replace("{{PHOTO_OPTION}}", offeredTools.includes("read_watch_photos") ? PHOTO_OPTION : "")
+    .replace("{{CHAIN_OPTION}}", offeredTools.includes("record_receipt_onchain") ? CHAIN_OPTION : "");
   return `${ROLE}
 
 ${step}

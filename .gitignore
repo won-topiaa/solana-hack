@@ -40,6 +40,9 @@ yarn-error.log*
 # cached API responses: they contain personal data (owner names, addresses)
 /.cache/
 
+# devnet wallet keys (devnet only, still secret)
+/.wallets/
+
 # vercel
 .vercel
 
