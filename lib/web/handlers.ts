@@ -8,6 +8,7 @@ import { createCaseFile, resolveApproval, sendUserMessage, type AgentDeps } from
 import { addPhoto, dropReadPhotoBytes, MAX_PHOTO_BYTES } from "../agent/photos";
 import type { CaseFile } from "../agent/types";
 import type { ChainService } from "../chain/adapter";
+import type { IdentityVerifier } from "../integrations/identity";
 import { prepareWalletSettlementPayment, runPrimarySale, runSettlement, type HeiWallets, type WalletPaymentRequest } from "../chain/heiLifecycle";
 import { receiptMemo, type DevnetRpc } from "../chain/solana";
 import { parseSignedByWallet, parseWalletAddress, verifyWalletProof, walletProofMessage, type SignedByWallet, type UnsignedForWallet } from "../chain/userWallet";
@@ -22,7 +23,7 @@ export type WebDeps = {
   agent: AgentDeps;
   registry: Registry;
   secret: string; // CASE_SECRET
-  hei?: { rpc: DevnetRpc; wallets: HeiWallets }; // devnet partner steps; absent = not offered
+  hei?: { rpc: DevnetRpc; wallets: HeiWallets; identity?: IdentityVerifier }; // devnet partner steps; absent = not offered
   chain?: ChainService; // for steps the user's own wallet signs
   now?: () => Date;
 };
@@ -62,7 +63,9 @@ function currentTime(deps: WebDeps): Date {
 
 function reply(deps: WebDeps, caseFile: CaseFile): CaseReply {
   const compact = dropReadPhotoBytes(caseFile);
-  return { token: sealCase(compact, deps.secret), view: buildView(compact, deps.registry) };
+  const identity = deps.hei?.identity;
+  const kycCheck = identity ? { label: identity.label, simulated: identity.provider === "simulated" } : undefined;
+  return { token: sealCase(compact, deps.secret), view: buildView(compact, deps.registry, kycCheck) };
 }
 
 function openToken(deps: WebDeps, token: unknown): CaseFile {
@@ -214,8 +217,12 @@ export async function runHeiSale(deps: WebDeps, input: { token: unknown }): Prom
   const caseFile = openToken(deps, input.token);
   const { hei, handoff, deal, shares } = heiParts(deps, caseFile);
   if (handoff.onchain?.heiSale) throw new BadRequest("The primary sale already ran");
-  const sale = await runPrimarySale(hei.rpc, hei.wallets, { heiMint: shares.mint, treasury: shares.treasury, deal, homeowner: caseFile.wallet?.address }, () =>
-    currentTime(deps),
+  const sale = await runPrimarySale(
+    hei.rpc,
+    hei.wallets,
+    { heiMint: shares.mint, treasury: shares.treasury, deal, homeowner: caseFile.wallet?.address },
+    () => currentTime(deps),
+    hei.identity,
   );
   return reply(deps, withOnchain(caseFile, { heiSale: sale }));
 }

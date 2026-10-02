@@ -12,6 +12,7 @@ import { createInterface } from "node:readline/promises";
 import { createAgentTools } from "../lib/agent/tools";
 import { createDevnetChain } from "../lib/chain/devnet";
 import { runPrimarySale, runSettlement, type HeiWallets } from "../lib/chain/heiLifecycle";
+import { createPlaidIdentitySandbox, simulatedIdentity } from "../lib/integrations/identity";
 import { createDevnetRpc, explorerAddressUrl, explorerTxUrl, getSolBalance, MIN_ISSUER_SOL } from "../lib/chain/solana";
 import { loadOrCreateWallet } from "../lib/chain/wallets";
 import { formatMicroUsd, formatMicroUsdExact, formatPercent, formatUsd } from "../lib/format";
@@ -74,12 +75,17 @@ async function main() {
   const shares = homeCase.handoff?.onchain?.heiShares;
   if (!deal || !shares?.mint) throw new Error("No HEI shares were issued");
 
-  // 2. KYC (simulated), closing, primary sale.
-  section("2. KYC, closing and the primary sale (KYC and the partner are simulated)");
-  const sale = await runPrimarySale(rpc, wallets, { heiMint: shares.mint, treasury: shares.treasury, deal });
+  // 2. KYC (identity check, then an on-chain attestation checked before thawing), closing, primary sale.
+  const { PLAID_CLIENT_ID: clientId, PLAID_SECRET: secret, PLAID_IDV_TEMPLATE_ID: templateId } = process.env;
+  const identity = clientId && secret && templateId ? createPlaidIdentitySandbox({ clientId, secret, templateId }) : simulatedIdentity;
+  section(`2. KYC (${identity.label} + Solana Attestation Service), closing and the primary sale (the partner is simulated)`);
+  const sale = await runPrimarySale(rpc, wallets, { heiMint: shares.mint, treasury: shares.treasury, deal }, () => new Date(), identity);
   console.log(`Test dollar (DUSD, no value): ${explorerAddressUrl(sale.paymentMint)}`);
-  for (const item of sale.kyc) console.log(`${item.name} (KYC): ${explorerAddressUrl(item.account)}`);
-  console.log(`Investor without KYC: account frozen (${explorerAddressUrl(sale.frozenAccount)})`);
+  for (const item of sale.kyc) {
+    const attested = item.attestationSignature ? `attested now (${explorerTxUrl(item.attestationSignature)})` : "attested in an earlier sale";
+    console.log(`${item.name}: KYC by ${item.verifiedBy}, ${attested}; attestation ${item.attestation ? explorerAddressUrl(item.attestation) : "?"}; share account ${explorerAddressUrl(item.account)}`);
+  }
+  console.log(`Investor without KYC: ${sale.noKycCheck}, so its account stays frozen (${explorerAddressUrl(sale.frozenAccount)})`);
   console.log(`Closing: the homeowner received ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (term sheet: ${formatUsd(deal.netCashUsd)}): ${explorerTxUrl(sale.closing.signature)}`);
   console.log(`Investor without KYC: purchase rejected by Token-2022 ("${sale.rejected.reason}"); money moved: ${sale.rejected.moneyMoved ? "YES" : "none"}.`);
   for (const purchase of sale.purchases) {

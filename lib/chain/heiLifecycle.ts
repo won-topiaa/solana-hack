@@ -11,7 +11,9 @@ import { address, type Address, type KeyPairSigner } from "@solana/kit";
 import { purchaseCostMicroUsd, sumMicroUsd, tokenPriceMicroUsd, toMicroUsd } from "../calc/sale";
 import { homeValueAfterYears, settle } from "../calc/settlement";
 import type { HeiTermSheet } from "../recommend/termSheet";
+import { simulatedIdentity, type IdentityVerifier } from "../integrations/identity";
 import { buyShares, payAtClosing } from "./heiSale";
+import { attestKyc, checkKycAttestation, kycReference, revokeKyc } from "./kyc";
 import { homeownerPaymentInstructions, homeownerPaymentMemo, planSettlement, receivedIn, servicerFor, settleHeiShares } from "./heiSettlement";
 import { loadOrCreateTestDollar, mintTestDollarsInstruction, openPaymentAccountInstruction, paymentBalance, type PaymentToken } from "./payment";
 import {
@@ -43,8 +45,17 @@ export type HeiWallets = {
 export type SaleRecord = {
   paymentMint: string;
   closing: { amountMicroUsd: string; signature: string };
-  kyc: { name: string; owner: string; account: string; signature: string | null }[]; // null: already open
+  kyc: {
+    name: string;
+    owner: string;
+    account: string;
+    signature: string | null; // opening the share account; null: already open
+    attestation?: string; // the investor's KYC attestation (Solana Attestation Service), checked before opening
+    verifiedBy?: string; // who verified the identity, as written in the attestation
+    attestationSignature?: string | null; // null: attested in an earlier sale
+  }[];
   frozenAccount: string; // the buyer without KYC
+  noKycCheck?: string; // why the buyer without KYC got no share account (the on-chain check's answer)
   rejected: { tokens: string; reason: string; moneyMoved: boolean };
   purchases: { name: string; owner: string; tokens: string; costMicroUsd: string; signature: string | null }[]; // null: bought in an earlier, interrupted run
   raisedMicroUsd: string;
@@ -104,6 +115,7 @@ export async function runPrimarySale(
   wallets: HeiWallets,
   input: { heiMint: string; treasury: string; deal: HeiDeal; homeowner?: string }, // homeowner: the user's own wallet, if connected
   now: () => Date = () => new Date(),
+  identity: IdentityVerifier = simulatedIdentity,
 ): Promise<SaleRecord> {
   const { issuer, noKyc } = wallets;
   const homeowner = input.homeowner ? address(input.homeowner) : wallets.homeowner.address;
@@ -114,12 +126,38 @@ export async function runPrimarySale(
   const amounts = allocation(supply, wallets.investors.length);
   await requireFunds(rpc, issuer.address);
 
-  // KYC (simulated): open and thaw the approved investors' accounts; the other stays frozen.
+  // KYC: an investor's share account is opened (thawed) only after its KYC attestation is
+  // read back from the chain and checks out. Without one, the identity is verified first
+  // and the attestation written. The buyer without KYC has none, so its account stays frozen.
   const kyc: SaleRecord["kyc"] = [];
   for (const investor of wallets.investors) {
-    const opened = await allowlistInvestor(rpc, issuer, heiMint, investor.wallet.address);
-    kyc.push({ name: investor.name, owner: investor.wallet.address, account: opened.account, signature: opened.signature });
+    const wallet = investor.wallet.address;
+    let check = await checkKycAttestation(rpc, issuer.address, wallet);
+    // A simulated check's attestation gives way once a real identity check is set up.
+    if (check.ok && check.data.provider !== identity.provider && identity.provider !== simulatedIdentity.provider) {
+      await revokeKyc(rpc, issuer, wallet);
+      check = await checkKycAttestation(rpc, issuer.address, wallet);
+    }
+    let attestationSignature: string | null = null;
+    if (!check.ok) {
+      const verified = await identity.verify(wallet);
+      attestationSignature = await attestKyc(rpc, issuer, wallet, { provider: identity.provider, reference: kycReference(verified.id) });
+      check = await checkKycAttestation(rpc, issuer.address, wallet);
+      if (!check.ok) throw new Error(`${investor.name}'s KYC attestation did not check out on-chain (${check.reason}); the share account stays frozen`);
+    }
+    const opened = await allowlistInvestor(rpc, issuer, heiMint, wallet);
+    kyc.push({
+      name: investor.name,
+      owner: wallet,
+      account: opened.account,
+      signature: opened.signature,
+      attestation: check.attestation,
+      verifiedBy: check.data.provider,
+      attestationSignature,
+    });
   }
+  const noKycCheck = await checkKycAttestation(rpc, issuer.address, noKyc.address);
+  if (noKycCheck.ok) throw new Error("The buyer meant to have no KYC has a KYC attestation; the demo cannot show a refusal");
   const frozen = await openFrozenAccount(rpc, issuer, heiMint, noKyc.address);
 
   // Where the sale stands: shares the investors already hold must be all that left the treasury.
@@ -177,6 +215,7 @@ export async function runPrimarySale(
     closing: { amountMicroUsd: String(netCash), signature: closing.signature },
     kyc,
     frozenAccount: frozen.account,
+    noKycCheck: noKycCheck.reason,
     rejected,
     purchases,
     raisedMicroUsd: String(sumMicroUsd(purchases.map((purchase) => BigInt(purchase.costMicroUsd)))),

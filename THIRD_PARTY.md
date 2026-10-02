@@ -22,6 +22,8 @@ Last updated: 2026-10-02 (the user's own wallet; FHFA house price index).
 | lucide-react | 1.50.0 | ISC; icons derived from Feather are MIT (both texts in `node_modules/lucide-react/LICENSE`) | https://github.com/lucide-icons/lucide |
 | @solana/kit-plugin-wallet | 0.20.0 | MIT | https://github.com/anza-xyz/kit-plugins |
 | @solana/react | 8.4.0 | MIT | https://github.com/anza-xyz/kit |
+| @solana/sysvars | 8.4.0 | MIT | https://github.com/anza-xyz/kit |
+| sas-lib | 2.0.0-beta.1 | MIT (the repository's LICENSE; the package itself has no license field). Installed with an npm `overrides` entry so it uses our @solana/kit 8.4 instead of its declared peer ^7 (checked: it builds and runs) | https://github.com/solana-foundation/solana-attestation-service |
 
 ## Development dependencies
 
@@ -71,6 +73,8 @@ owners' own terms above allow use with attribution. Re-check before a public lau
 | Service | Used for | Terms | Notes |
 |---|---|---|---|
 | RentCast API | Home records (owner check, last sale) and value range. Without a key, or with `PROPERTY_DATA_SOURCE=demo`, made-up demo data in `data/demo/properties.json` | https://www.rentcast.io/terms-api | Storing and showing the data to users is allowed; no attribution required. Free plan: 50 requests a month, so lookups are cached for 30 days in the git-ignored `.cache/rentcast/`. |
+| Plaid Identity Verification (sandbox) | Investor KYC before the on-chain attestation, with Plaid's published sandbox test identity (a made-up person). Only when `PLAID_IDV_TEMPLATE_ID` is set; otherwise a simulated check, labeled | https://plaid.com/legal/ | Sandbox only (free). Backend-only flow; nothing personal is stored: the attestation keeps a SHA-256 of the verification id. |
+| Solana Attestation Service | KYC attestations for investors' wallets on devnet, written by the demo issuer and checked on-chain before a share account is thawed | https://github.com/solana-foundation/solana-attestation-service | Program `22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG`. Ownflow (the simulated partner) is the attestation issuer, not a regulated KYC provider. |
 | Plaid Liabilities (sandbox) | Reading a mortgage's balance and terms from the lender, after the user approves | https://plaid.com/legal/ | Sandbox only: test data from Plaid's test institutions. The access token is used once and not stored. Production would use Plaid Link in the browser. |
 | Google Gemini API | The agent's conversation and tool calling, and reading watch photos (image input, JSON output) | https://ai.google.dev/gemini-api/terms | Users must be 18+. Our key is on the paid tier: Google does not use prompts to improve its products and keeps them only for a limited time to detect abuse. |
 | Solana devnet (public RPC) | Receipt memos and Token-2022 mints for the demo | https://solana.com/docs/references/clusters | Devnet only; rate limited. Test SOL from https://faucet.solana.com. |

@@ -2,7 +2,8 @@
 // (scripts/agent-chat.ts) and the web app (lib/web/server.ts), so both talk to the
 // same model, data sources and devnet wallets.
 //   GEMINI_API_KEY (required), GEMINI_MODEL; RENTCAST_API_KEY, PROPERTY_DATA_SOURCE=demo;
-//   PLAID_CLIENT_ID + PLAID_SECRET (sandbox); SOLANA_RPC_URL; REGISTRY_FROZEN_ON (judging period).
+//   PLAID_CLIENT_ID + PLAID_SECRET (sandbox), PLAID_IDV_TEMPLATE_ID (investor KYC in Plaid's sandbox);
+//   SOLANA_RPC_URL; REGISTRY_FROZEN_ON (judging period).
 //   Devnet wallets: .wallets/devnet.
 
 import type { ChainService } from "../chain/adapter";
@@ -10,6 +11,7 @@ import { createDevnetChain } from "../chain/devnet";
 import type { HeiWallets } from "../chain/heiLifecycle";
 import { createDevnetRpc, type DevnetRpc } from "../chain/solana";
 import { loadOrCreateWallet } from "../chain/wallets";
+import { createPlaidIdentitySandbox, simulatedIdentity, type IdentityVerifier } from "../integrations/identity";
 import { createPlaidSandboxSource } from "../integrations/plaid";
 import { createDemoPropertySource, createMemoryStore, createRentcastSource, withCache } from "../integrations/rentcast";
 import { createFileStore } from "../integrations/rentcastCache";
@@ -25,8 +27,8 @@ export type AgentServices = {
   agent: AgentDeps;
   registry: Registry;
   chain: ChainService;
-  hei: { rpc: DevnetRpc; wallets: HeiWallets };
-  info: { model: string; propertyData: "rentcast" | "demo"; plaid: boolean };
+  hei: { rpc: DevnetRpc; wallets: HeiWallets; identity: IdentityVerifier };
+  info: { model: string; propertyData: "rentcast" | "demo"; plaid: boolean; kyc: string };
 };
 
 type Env = Record<string, string | undefined>;
@@ -44,6 +46,9 @@ export async function createAgentServices(env: Env = process.env): Promise<Agent
   // Plaid (sandbox test data) is offered only when both Plaid values are set.
   const { PLAID_CLIENT_ID: clientId, PLAID_SECRET: secret } = env;
   const mortgageSource = clientId && secret ? createPlaidSandboxSource({ clientId, secret }) : undefined;
+  // Investor KYC: Plaid Identity Verification (sandbox) when its template is set, else a labeled simulated check.
+  const templateId = env.PLAID_IDV_TEMPLATE_ID;
+  const identity = clientId && secret && templateId ? createPlaidIdentitySandbox({ clientId, secret, templateId }) : simulatedIdentity;
 
   // Devnet only: the issuer plays the partners; the user wallet is the homeowner or watch owner.
   const rpc = createDevnetRpc(env.SOLANA_RPC_URL || undefined);
@@ -77,7 +82,8 @@ export async function createAgentServices(env: Env = process.env): Promise<Agent
         ],
         noKyc,
       },
+      identity,
     },
-    info: { model, propertyData: useRentcast ? "rentcast" : "demo", plaid: Boolean(mortgageSource) },
+    info: { model, propertyData: useRentcast ? "rentcast" : "demo", plaid: Boolean(mortgageSource), kyc: identity.label },
   };
 }

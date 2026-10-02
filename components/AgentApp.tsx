@@ -45,7 +45,11 @@ const PERSONA_ICONS: Record<string, ReactNode> = {
 
 const WHY_SOLANA = [
   { icon: <Receipt size={20} strokeWidth={1.75} />, title: "A receipt you can check", text: "The recommendation's hash and the values behind it are written on-chain when you approve. No personal data." },
-  { icon: <ShieldCheck size={20} strokeWidth={1.75} />, title: "Compliance in the token", text: "Share accounts start frozen. Only accounts opened after KYC can hold shares; the token refuses everyone else." },
+  {
+    icon: <ShieldCheck size={20} strokeWidth={1.75} />,
+    title: "Compliance in the token",
+    text: "Share accounts start frozen. Only wallets with a KYC attestation on Solana, checked on-chain, are opened; the token refuses everyone else.",
+  },
   { icon: <ArrowRightLeft size={20} strokeWidth={1.75} />, title: "Delivery against payment", text: "Each purchase is one transaction: the buyer's dollars and the shares move together, or nothing moves." },
   { icon: <Flame size={20} strokeWidth={1.75} />, title: "Pay and burn together", text: "At settlement each holder is paid its share and its tokens are burned in the same transaction." },
   { icon: <Lock size={20} strokeWidth={1.75} />, title: "Fixed supply, locked facts", text: "After minting, the supply can never grow and the hashes written into the token can never change." },

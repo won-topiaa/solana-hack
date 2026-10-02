@@ -77,6 +77,7 @@ export type CaseView = {
     canSettle: boolean;
     termYears: number;
     usesWallet: boolean; // the user's own wallet is the homeowner: it signs the settlement payment
+    kycCheck: { label: string; simulated: boolean }; // who checks investors' identity before their KYC attestation
     scenarios: { id: string; label: string; note: string }[]; // home prices follow the real FHFA index
     sale: { lines: string[]; links: Link[] } | null;
     settlement: { lines: string[]; links: Link[]; correct: boolean } | null;
@@ -249,7 +250,13 @@ function onchainOf(caseFile: CaseFile): Link[] {
   return links;
 }
 
-function heiOf(caseFile: CaseFile, registry: Registry): CaseView["hei"] {
+/** Who verified the identity, from the provider id written in the attestation. */
+function kycLabel(provider: string | undefined): string {
+  if (provider === "plaid-identity-verification-sandbox") return "Plaid Identity Verification, sandbox test identity";
+  return "simulated check";
+}
+
+function heiOf(caseFile: CaseFile, registry: Registry, kycCheck: { label: string; simulated: boolean }): CaseView["hei"] {
   const onchain = caseFile.handoff?.onchain;
   const sheet = caseFile.handoff?.termSheet;
   if (!onchain?.heiShares || !sheet) return null;
@@ -262,18 +269,24 @@ function heiOf(caseFile: CaseFile, registry: Registry): CaseView["hei"] {
     canSettle: Boolean(sale) && !settled,
     termYears: sheet.termYears,
     usesWallet: Boolean(caseFile.wallet),
+    kycCheck,
     scenarios: settlementScenarios(registry, sheet.termYears).map(({ id, label, note }) => ({ id, label, note })),
     sale: sale
       ? {
           lines: [
             `Closing: the partner paid ${homeowner} ${formatMicroUsd(BigInt(sale.closing.amountMicroUsd))} (simulated partner; its test dollars are minted in the same transaction).`,
-            ...sale.kyc.map((item) => `${item.name}: KYC approved (simulated); share account opened.`),
-            `A buyer without KYC was refused on-chain ("${sale.rejected.reason}"); no money moved.`,
+            ...sale.kyc.map((item) =>
+              item.attestation
+                ? `${item.name}: identity checked (${kycLabel(item.verifiedBy)}); its KYC attestation on Solana was checked before the share account opened.`
+                : `${item.name}: KYC approved (simulated); share account opened.`,
+            ),
+            `A buyer without KYC${sale.noKycCheck ? ` (${sale.noKycCheck})` : ""} was refused on-chain ("${sale.rejected.reason}"); no money moved.`,
             ...sale.purchases.map((purchase) => `${purchase.name} bought ${BigInt(purchase.tokens).toLocaleString("en-US")} shares for ${formatMicroUsd(BigInt(purchase.costMicroUsd))} (simulated investor; test dollars minted in the purchase).`),
             `Raised ${formatMicroUsd(BigInt(sale.raisedMicroUsd))}.`,
           ],
           links: [
             { label: "Closing payment", url: explorerTxUrl(sale.closing.signature) },
+            ...sale.kyc.flatMap((item) => (item.attestation ? [{ label: `${item.name} KYC attestation`, url: explorerAddressUrl(item.attestation), detail: "Solana Attestation Service" }] : [])),
             ...sale.purchases.flatMap((purchase) => (purchase.signature ? [{ label: `${purchase.name} purchase`, url: explorerTxUrl(purchase.signature) }] : [])),
             { label: "Account without KYC (frozen)", url: explorerAddressUrl(sale.frozenAccount) },
             { label: "Test dollar (DUSD, no value)", url: explorerAddressUrl(sale.paymentMint) },
@@ -304,7 +317,8 @@ function heiOf(caseFile: CaseFile, registry: Registry): CaseView["hei"] {
   };
 }
 
-export function buildView(caseFile: CaseFile, registry: Registry): CaseView {
+/** `kycCheck`: the server's identity check for investors (Plaid's sandbox, or a simulated check). */
+export function buildView(caseFile: CaseFile, registry: Registry, kycCheck = { label: "Simulated identity check", simulated: true }): CaseView {
   const assets = assetsOf(caseFile);
   return {
     caseId: caseFile.id,
@@ -318,6 +332,6 @@ export function buildView(caseFile: CaseFile, registry: Registry): CaseView {
     comparison: comparisonOf(caseFile, registry),
     documents: documentsOf(caseFile),
     onchain: onchainOf(caseFile),
-    hei: heiOf(caseFile, registry),
+    hei: heiOf(caseFile, registry, kycCheck),
   };
 }

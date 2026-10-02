@@ -16,7 +16,7 @@ import { WalletBar } from "./WalletBar";
 function linkIcon(label: string): ReactNode {
   if (label.startsWith("Closing")) return <Landmark size={18} strokeWidth={1.75} />;
   if (label.includes("purchase")) return <ArrowRightLeft size={18} strokeWidth={1.75} />;
-  if (label.includes("without KYC")) return <ShieldCheck size={18} strokeWidth={1.75} />;
+  if (label.includes("KYC")) return <ShieldCheck size={18} strokeWidth={1.75} />;
   if (label.startsWith("Settlement") || label.startsWith("Payout")) return <Flame size={18} strokeWidth={1.75} />;
   return <Wallet size={18} strokeWidth={1.75} />;
 }
@@ -84,8 +84,9 @@ export function PartnerConsole() {
     <div className="border-b border-neutral-800 px-6 py-14 text-center sm:px-10">
       <h1 className="text-[40px] font-semibold tracking-[-2px] text-neutral-100">Partner &amp; investors</h1>
       <p className="mx-auto mt-3 max-w-[640px] text-neutral-400">
-        Ownflow is a connector; a licensed partner would issue the HEI and run these steps. Here the app plays the partner on Solana devnet, pays in test dollars
-        (DUSD) with no value, and simulates KYC, the appraisal and the passing years.
+        Ownflow is a connector; a licensed partner would issue the HEI and run these steps. Here the app plays the partner on Solana devnet and pays in test
+        dollars (DUSD) with no value. Investors&apos; KYC attestations are real on-chain records; the passing years and the appraisal are simulated, with home
+        prices following the real FHFA index.
       </p>
     </div>
   );
@@ -142,7 +143,12 @@ export function PartnerConsole() {
             <div className="grid gap-px overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-800 sm:grid-cols-3">
               {[
                 { icon: <Landmark size={18} strokeWidth={1.75} />, title: "Closing", text: `The partner pays ${hei.usesWallet ? "your wallet" : "the homeowner"} the net cash, from its own money.`, tag: <SimulatedTag /> },
-                { icon: <ShieldCheck size={18} strokeWidth={1.75} />, title: "KYC", text: "Two investors pass and their share accounts open; a third stays frozen.", tag: <SimulatedTag label="Simulated KYC" /> },
+                {
+                  icon: <ShieldCheck size={18} strokeWidth={1.75} />,
+                  title: "KYC",
+                  text: `${hei.kycCheck.label}, then a KYC attestation on Solana (Solana Attestation Service), checked on-chain before a share account opens. A third buyer has none and stays frozen.`,
+                  tag: hei.kycCheck.simulated ? <SimulatedTag label="Simulated identity check" /> : <SimulatedTag label="Sandbox test identity" />,
+                },
                 { icon: <ArrowRightLeft size={18} strokeWidth={1.75} />, title: "Purchases", text: "Dollars and shares move in one transaction; the buyer without KYC is refused by the token.", tag: null },
               ].map((item) => (
                 <div key={item.title} className="space-y-3 bg-black p-5">

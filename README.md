@@ -145,7 +145,7 @@ buyback pays exactly $144,000.069760 and $80,765.799126.
 | Recommendation receipt | Memo: `ownflow receipt v1 rec=<hash> passports=<hash> registry=<version> selected=<path>` | Your own wallet (checked on-chain after it lands), or the demo wallet |
 | HEI share token | Token-2022 mint, decimals 0, supply 234,131, extensions: DefaultAccountState (frozen), PermanentDelegate (issuer, for settlement), MetadataPointer + TokenMetadata (passport and recommendation hashes; update authority removed); mint authority removed. The mint address is derived from the issuer's signature over the receipt hashes, so one receipt can only ever make one token | Issuer |
 | Watch 1-of-1 token | Token-2022 mint, supply 1, mint authority removed, metadata locked, held by the user; address derived the same way | Issuer |
-| KYC allowlist | Investor accounts thawed by the issuer; others stay frozen | Issuer |
+| KYC | An identity check (Plaid Identity Verification in sandbox, or a simulated check, named as such), then a Solana Attestation Service attestation for the investor's wallet (credential `ownflow-kyc-demo`, schema `investor-kyc`: provider, a hash of the check's id, the time; valid one year). The issuer reads the attestation back from the chain and checks issuer, wallet, schema and expiry by the chain's clock before it thaws the investor's share account; a wallet without one stays frozen | Issuer (demo attestation issuer) |
 | Closing | Test-dollar payment to the homeowner, with a memo naming the HEI and a once-only marker account (created "with seed" from the issuer), so a second closing payment for the same HEI fails on-chain | Issuer |
 | Primary sale | One transaction: the buyer's test dollars are minted (simulated investor money), paid to the issuer, and the shares go to the buyer | Buyer + issuer |
 | Settlement | (1) The homeowner pays the payout into the HEI's own settlement account (memo names the HEI and the amount; any shortfall is minted to the homeowner first, simulated). (2) For each holder: payment from the settlement account + burn of that holder's shares, in one transaction. Refused once every share is burned | (1) Your own wallet, or the demo wallet; (2) issuer (permanent delegate) and the HEI's servicer key |
@@ -170,8 +170,10 @@ Sample records from one run (devnet):
 - **The partners.** Ownflow is a connector, not the issuer or the custodian. A licensed partner
   would hold the HEI contract and issue the shares; a vault partner would hold the watch. In the demo
   one server-held "issuer" wallet plays these roles.
-- **KYC, the appraisal, the vault intake and the stolen-watch registry.** Each is labeled
-  "Simulated" where it appears. The appraisal at settlement follows real data: the FHFA
+- **KYC's identity check, the appraisal, the vault intake and the stolen-watch registry.** Each is
+  labeled where it appears. The KYC attestation itself is a real Solana Attestation Service record
+  checked on-chain; the identity check behind it is Plaid's sandbox with Plaid's test identity when
+  configured, otherwise simulated. The appraisal at settlement follows real data: the FHFA
   All-Transactions House Price Index (FRED `USSTHPI`), growing at the index's actual yearly rate
   over the same number of past years.
 - **Time.** Devnet does not wait years: the settlement page lets you pick when the HEI settles; the

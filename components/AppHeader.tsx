@@ -64,6 +64,9 @@ export function AppFooter() {
             <Link href="/partner" className="block text-neutral-400 hover:text-white">
               Partner &amp; investors
             </Link>
+            <Link href="/privacy" className="block text-neutral-400 hover:text-white">
+              Privacy
+            </Link>
           </div>
           <div className="space-y-3">
             <p className="font-medium text-neutral-200">Network</p>
