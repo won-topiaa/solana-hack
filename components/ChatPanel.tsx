@@ -135,9 +135,11 @@ export function ChatPanel({ view, busy, suggestions, onSend, onAnswer }: Props) 
               <p className="px-1 text-xs text-neutral-500">
                 {view.approval.needsWallet
                   ? "Devnet: your wallet will show the transaction to sign. Nothing runs before you sign."
-                  : view.wallet
-                    ? "Devnet: after you approve, the simulated partner signs this step. Nothing runs before you choose."
-                    : "Devnet demo: after you approve, the app signs with a demo wallet. Nothing runs before you choose."}
+                  : !view.approval.onChain
+                    ? "Nothing runs before you choose."
+                    : view.wallet
+                      ? "Devnet: after you approve, the simulated partner signs this step. Nothing runs before you choose."
+                      : "Devnet demo: after you approve, the app signs with a demo wallet. Nothing runs before you choose."}
               </p>
               <div className="flex gap-2">
                 <button

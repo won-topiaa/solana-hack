@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { testRegistry } from "../params/test-fixtures";
-import { createCaseFile, MAX_MODEL_CALLS_PER_TURN, resolveApproval, sendUserMessage } from "./orchestrator";
+import { createCaseFile, MAX_MODEL_CALLS_PER_TURN, MAX_TOOL_CALLS_PER_REPLY, resolveApproval, sendUserMessage } from "./orchestrator";
 import { createScriptedLlm } from "./scripted";
 import { createDemoPropertySource } from "../integrations/rentcast";
 import { createAgentTools, type AgentTool } from "./tools";
@@ -151,6 +151,16 @@ describe("safety limits", () => {
     expect(llm.requests.at(-1)?.messages.at(-1)).toMatchObject({
       results: [{ output: { error: "Unknown tool: transfer_funds" } }],
     });
+  });
+
+  it("runs at most a few tools from one reply, and answers the rest with an error", async () => {
+    const many = { text: "", toolCalls: Array.from({ length: MAX_TOOL_CALLS_PER_REPLY + 2 }, (_, index) => ({ name: "record_goal", args: { cashNeededUsd: -1, neededBy: "2026-10-09" }, providerCallId: `c${index}` })) };
+    const llm = createScriptedLlm([many, say("Done.")]);
+    await sendUserMessage(createCaseFile("case-cap", now()), "Hi", { llm, tools: TOOLS, now });
+    const results = (llm.requests.at(-1)?.messages.at(-1) as { results: { output: Record<string, unknown> }[] }).results;
+    expect(results).toHaveLength(MAX_TOOL_CALLS_PER_REPLY + 2);
+    expect(results.slice(MAX_TOOL_CALLS_PER_REPLY).every((result) => String(result.output.error).startsWith("At most"))).toBe(true);
+    expect(results.slice(0, MAX_TOOL_CALLS_PER_REPLY).every((result) => result.output.error === undefined)).toBe(true);
   });
 
   it("stops a model that keeps calling tools without answering", async () => {

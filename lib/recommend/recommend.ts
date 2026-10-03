@@ -6,7 +6,7 @@
 
 import type { CaseFile } from "../agent/types";
 import type { RealEstateAsset, WatchAsset } from "../assets/types";
-import { formatUsd } from "../format";
+import { formatUsd, formatYears } from "../format";
 import { daysBetween } from "../params/dates";
 import { comparisonTerms, heiPricing, watchTerms } from "../params/inputs";
 import { checkParamsFresh } from "../params/staleness";
@@ -178,7 +178,8 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
       category: watch.category,
       kept: kept.has(watch.id),
     }));
-    const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: years * 365, urgentDays: settings.dealerUrgentDays };
+    // Loan terms are in days and the horizon in years: count it in 30-day months, so "6 months" (0.5 years) is 180 days, the longest watch loan.
+    const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: Math.round(years * 12) * 30, urgentDays: settings.dealerUrgentDays };
     for (const watch of watchInputs) options.push(...allWatchOptions(watch, watchT).map((option) => watchSuitability(option, need, timing.horizonDays, watchT)));
     const result = watchPlan(watchInputs, need, timing, watchT);
     plan = result.plan;
@@ -264,8 +265,8 @@ function chooseHomePath(
     const pick = cheapest(loans);
     rulesFired.push("RE-1");
     reasons.push(
-      `You plan to repay within ${helocFirstYears} years, so a HELOC or home equity loan comes first (rule RE-1). ` +
-        `${pick.label} costs least over ${years} years: about ${formatUsd(pick.totalCostUsd ?? 0)} in interest.`,
+      `You plan to repay within ${formatYears(helocFirstYears)}, so a HELOC or home equity loan comes first (rule RE-1). ` +
+        `${pick.label} costs least over ${formatYears(years)}: about ${formatUsd(pick.totalCostUsd ?? 0)} in interest.`,
     );
     return pick;
   }
@@ -282,7 +283,7 @@ function chooseHomePath(
   if (candidates.length === 0) return null;
   const pick = cheapest(candidates);
   reasons.push(
-    `Lowest total cost over ${years} years among the paths that fit: about ${formatUsd(pick.totalCostUsd ?? 0)} ` +
+    `Lowest total cost over ${formatYears(years)} among the paths that fit: about ${formatUsd(pick.totalCostUsd ?? 0)} ` +
       `(the HEI is counted as if prices rise ${pct(Math.max(...growthScenarios))} a year).`,
   );
   return pick;

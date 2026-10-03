@@ -28,9 +28,10 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }
 
-function connectedTo(expected: string) {
+/** The connected wallet's signer, if it is the account tied to the case. Call it before asking the server for anything. */
+export function connectedTo(expected: string) {
   const connected = walletClient.wallet.getState().connected;
-  if (!connected?.signer) throw new Error("Connect your wallet first (the wallet button above the chat).");
+  if (!connected?.signer) throw new Error("Connect your wallet first: use the wallet button at the top of the case.");
   if (connected.account.address !== expected) {
     throw new Error(`Switch your wallet to ${shortAddress(expected)}: that is the account tied to this case.`);
   }

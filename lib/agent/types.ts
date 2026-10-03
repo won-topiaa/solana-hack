@@ -79,7 +79,7 @@ export type CaseFile = {
       heiSale?: SaleRecord; // the partner's steps after issuance (simulated partner, devnet)
       heiSettlement?: SettlementRecord;
       /** A settlement payment built for the user's wallet to sign, waiting for the signature. */
-      heiSettlementPending?: { years: number; growth: number; amountMicroUsd: string; mintedMicroUsd: string; preparedAt: string };
+      heiSettlementPending?: { years: number; growth: number; amountMicroUsd: string; lastValidBlockHeight?: string; preparedAt: string };
     };
   }; // steps 6 (off-chain), 7 (on-chain, devnet) and 8 (settlement)
   messages: AgentMessage[];

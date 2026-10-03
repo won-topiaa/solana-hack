@@ -277,17 +277,37 @@ export async function accountExists(rpc: DevnetRpc, account: Address): Promise<b
   return value !== null;
 }
 
-/** What a user's wallet gets for fees, and the balance below which it gets it. */
-export const USER_FEE_SOL = 0.01;
+/** What the demo wallets the server holds get for fees, and the balance below which they get it. */
+const DEMO_FEE_SOL = 0.01;
+
+/** Keeps a demo wallet the server holds able to pay its own fees (only the server can spend it). */
+export async function fundDemoWallet(rpc: DevnetRpc, issuer: KeyPairSigner, wallet: Address): Promise<Signature | null> {
+  if ((await getSolBalance(rpc, wallet)) >= DEMO_FEE_SOL / 2) return null;
+  await requireFunds(rpc, issuer.address);
+  return sendDevnetSol(rpc, issuer, wallet, DEMO_FEE_SOL);
+}
 
 /**
- * Gives a user's wallet devnet SOL for its own transaction fees when it is low, so a
- * person trying the demo with their own wallet does not need a faucet first.
+ * A user's own wallet gets devnet SOL for its fees once, ever: enough for a new account's
+ * minimum balance (about 0.00089 SOL) and hundreds of 0.000005 SOL fees. Each top-up
+ * carries a memo, so the wallet's history shows whether it already had one; without
+ * that, replaying a request could drain the issuer.
  */
+export const USER_FEE_SOL = 0.002;
+const USER_FEE_MIN_SOL = 0.0001;
+export const FEE_TOP_UP_MEMO = "ownflow fee top-up v1";
+
 export async function ensureFeeSol(rpc: DevnetRpc, issuer: KeyPairSigner, wallet: Address): Promise<Signature | null> {
-  if ((await getSolBalance(rpc, wallet)) >= USER_FEE_SOL / 2) return null;
+  if ((await getSolBalance(rpc, wallet)) >= USER_FEE_MIN_SOL) return null;
+  const history = await rpc.getSignaturesForAddress(wallet, { commitment: "confirmed", limit: 100 }).send();
+  if (history.some((entry) => entry.err === null && entry.memo?.includes(FEE_TOP_UP_MEMO))) {
+    throw new Error(`Your wallet is out of devnet SOL for fees and already had its top-up; get a little from https://faucet.solana.com (network: devnet)`);
+  }
   await requireFunds(rpc, issuer.address);
-  return sendDevnetSol(rpc, issuer, wallet, USER_FEE_SOL);
+  return sendInstructions(rpc, issuer, [
+    getAddMemoInstruction({ memo: FEE_TOP_UP_MEMO }),
+    getTransferSolInstruction({ source: issuer, destination: wallet, amount: lamports(BigInt(Math.round(USER_FEE_SOL * 1e9))) }),
+  ]);
 }
 
 /** The receipt as a memo: hashes, versions and the chosen path only. No personal data. */

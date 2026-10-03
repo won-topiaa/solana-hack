@@ -38,7 +38,7 @@ describe("the comparison chart (persona B)", () => {
     expect(Math.round(hei?.low ?? 0)).toBe(84_131);
     expect(Math.round(hei?.high ?? 0)).toBe(164_652);
     expect(hei).toMatchObject({ recommended: true, text: "$84,131 to $164,652" });
-    expect(costs?.note).toBe("HEI: from prices flat to +3% a year.");
+    expect(costs?.note).toBe("HEI: the bar runs from prices that stay flat to prices that rise 3% a year.");
   });
 });
 

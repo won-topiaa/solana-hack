@@ -138,12 +138,15 @@ export async function settleHeiShares(
     payoutMicroUsd: bigint;
     tokenSupply: bigint;
     memo: string;
+    /** SIMULATED: the rest of the homeowner's money, minted into the settlement account in the first payout transaction. */
+    topUpMicroUsd?: bigint;
   },
 ): Promise<SettlementRun> {
   const plan = await planSettlement(rpc, input);
   const servicer = await servicerFor(input.issuer, input.heiMint);
+  const topUp = input.topUpMicroUsd ?? BigInt(0);
   const balance = await paymentBalance(rpc, input.token, servicer.address);
-  if (balance < plan.paidMicroUsd) {
+  if (balance + topUp < plan.paidMicroUsd) {
     throw new Error(`The settlement account has ${balance} micro-dollars but the holders are owed ${plan.paidMicroUsd}: the homeowner's payment has not arrived`);
   }
 
@@ -163,7 +166,9 @@ export async function settleHeiShares(
   for (const [index, batch] of batches.entries()) {
     const memo = `${input.memo} batch=${index + 1}/${batches.length}`;
     const steps = await settlementInstructions({ servicer, issuer: input.issuer, heiMint: input.heiMint, token: input.token, payouts: batch, memo });
-    sent.push(await sendInstructions(rpc, input.issuer, steps));
+    // The simulated rest of the homeowner's money arrives with the first payouts, never on its own.
+    const funding = index === 0 && topUp > BigInt(0) ? [await mintTestDollarsInstruction(input.token, input.issuer, servicer.address, topUp)] : [];
+    sent.push(await sendInstructions(rpc, input.issuer, [...funding, ...steps]));
   }
   return { payouts: plan.payouts, paidMicroUsd: plan.paidMicroUsd, signatures: [...signatures, ...sent], batches: sent };
 }

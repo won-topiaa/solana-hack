@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMicroUsd, formatMicroUsdExact, formatPercent, formatUsd, formatUsdCompact } from "./format";
+import { formatMicroUsd, formatMicroUsdExact, formatPercent, formatUsd, formatUsdCompact, formatYears, pricesText } from "./format";
 
 describe("formatUsd", () => {
   it("writes whole US dollars with separators", () => {
@@ -34,5 +34,22 @@ describe("formatUsdCompact", () => {
     expect(formatUsdCompact(1_200_000)).toBe("$1.2M");
     expect(formatUsdCompact(900)).toBe("$900");
     expect(formatUsdCompact(0)).toBe("$0");
+  });
+});
+
+describe("formatYears and pricesText", () => {
+  it("write a length of time the same way everywhere", () => {
+    expect(formatYears(10)).toBe("10 years");
+    expect(formatYears(1)).toBe("1 year");
+    expect(formatYears(16 / 12)).toBe("1.33 years");
+    expect(formatYears(0.25)).toBe("3 months");
+    expect(formatYears(1 / 12)).toBe("1 month");
+    expect(formatYears(0.01)).toBe("1 month"); // never "0 months"
+  });
+
+  it("write a price scenario with its direction", () => {
+    expect(pricesText(0)).toBe("stay flat");
+    expect(pricesText(0.03)).toBe("rise 3% a year");
+    expect(pricesText(-0.02)).toBe("fall 2% a year");
   });
 });

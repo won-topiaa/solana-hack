@@ -124,8 +124,9 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
     const reason = `It would need ${pct(share)} of the home value; the limit is ${pct(terms.hei.maxInvestmentShareOfValue)}.`;
     return { ...base, cashNowUsd: 0, risks: [reason], informational: true, suitable: false, whyNotSuitable: reason };
   }
-  // The investors' claim comes after the mortgage, so the home must have room for it too.
-  const tooMuch = overEquity(home, hei.grossInvestmentUsd, "investment");
+  // The investors' claim (their share of the home's value, more than they paid because of
+  // the discount) comes after the mortgage, so the home must have room for it too.
+  const tooMuch = overEquity(home, hei.shareOfFutureValue * home.valueUsd, "investors' share");
   if (tooMuch) return { ...base, cashNowUsd: 0, risks: [tooMuch], informational: true, suitable: false, whyNotSuitable: tooMuch };
 
   // Settlement at the user's planned horizon (early settlement is allowed), never past the longest term.

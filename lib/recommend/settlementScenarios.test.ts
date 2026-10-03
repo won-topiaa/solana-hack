@@ -22,4 +22,9 @@ describe("settlement scenarios", () => {
     expect(findSettlementScenario(registry, 5, "maturity-10y")).toBeNull();
     expect(findSettlementScenario(registry, 10, "maturity-10y")?.years).toBe(10);
   });
+
+  it("call a settlement before the end of the term a buyback, and at the end a maturity", () => {
+    expect(settlementScenarios(registry, 10).map((scenario) => scenario.label)).toEqual(["Buyback after 2 years", "Maturity after 10 years"]);
+    expect(settlementScenarios(registry, 11).map((scenario) => scenario.label)).toEqual(["Buyback after 2 years", "Buyback after 10 years"]);
+  });
 });

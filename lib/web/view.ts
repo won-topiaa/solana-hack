@@ -6,7 +6,7 @@
 import type { CaseFile, Stage } from "../agent/types";
 import type { RealEstateAsset, WatchAsset } from "../assets/types";
 import { explorerAddressUrl, explorerTxUrl } from "../chain/solana";
-import { formatMicroUsd, formatPercent, formatUsd } from "../format";
+import { formatMicroUsd, formatPercent, formatUsd, formatYears } from "../format";
 import type { Registry } from "../params/types";
 import { hashOf } from "../recommend/canonical";
 import { cashText, costText, frozenNote } from "../recommend/display";
@@ -23,6 +23,8 @@ export type Link = { label: string; url: string; detail?: string };
 
 /** Steps the user's own wallet signs, by the tool that asks for approval. */
 const WALLET_SIGNED_TOOLS = ["record_receipt_onchain"];
+/** Steps that write to Solana devnet (the others read data or run a simulated check). */
+const ON_CHAIN_TOOLS = ["record_receipt_onchain", "issue_hei_shares", "issue_watch_token"];
 
 /** True when approving the pending step means signing in the user's own wallet. */
 export function approvalNeedsWallet(caseFile: CaseFile): boolean {
@@ -41,7 +43,7 @@ export type CaseView = {
   stage: Stage;
   progress: ProgressStep[]; // goal -> ... -> on-chain (-> sale -> settlement for an HEI)
   chat: { role: "user" | "agent"; text: string }[];
-  approval: { id: string; summary: string; needsWallet: boolean } | null;
+  approval: { id: string; summary: string; needsWallet: boolean; onChain: boolean } | null;
   /** The user's own wallet, when connected; null: the demo wallet stands in. `locked`: on-chain records name it. */
   wallet: { address: string; locked: boolean } | null;
   goal: string[] | null;
@@ -93,16 +95,33 @@ function personaOf(caseFile: CaseFile): CaseView["persona"] {
   return DEMO_PERSONAS.find((persona) => persona.id === id) ?? null;
 }
 
-/** Dollar amounts ("$150,000", "$1.2 million") and percentages ("4.6%", "20 percent"). */
-const MONEY = /\$\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|K|thousand|million|M|billion|B)\b)?/g;
-const PERCENT = /\d+(?:\.\d+)?\s?(?:%|percent\b)/g;
+const AMOUNT = "[amount: see the panel]";
+const RATE = "[rate: see the panel]";
+
+/**
+ * Number shapes the model might write: "$150,000", "USD 150", "$1.2 million", "150k",
+ * "234,131 dollars", "150000", "4.6%", "7.7 per cent". Dates (2026-10-02), small counts
+ * ("10 years", "photo-1") and ids are left alone.
+ */
+const FIGURES: [RegExp, string][] = [
+  [/(?:\$|\bUS\$|\bUSD)\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|K|thousand|million|M|billion|B)\b)?/g, AMOUNT],
+  [/\b\d+(?:\.\d+)?\s?(?:%|percent\b|per\s?cent\b)/gi, RATE],
+  [/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?(?:\s?(?:dollars|USD)\b)?/gi, AMOUNT],
+  [/\b\d+(?:\.\d+)?\s?(?:k|thousand|million|billion|dollars)\b/gi, AMOUNT],
+  [/\b\d{5,}(?:\.\d+)?\b/g, AMOUNT],
+];
+const LINK = /(https?:\/\/[^\s<>"']+)/;
 
 /**
  * The web agent is told never to write figures (the panel shows the code-made ones). If
  * it writes one anyway, it is replaced here, so no model-made number reaches the page.
+ * Links are kept whole.
  */
 export function withoutFigures(text: string): string {
-  return text.replace(MONEY, "[amount: see the panel]").replace(PERCENT, "[rate: see the panel]");
+  return text
+    .split(LINK)
+    .map((part, index) => (index % 2 === 1 ? part : FIGURES.reduce((out, [pattern, mask]) => out.replace(pattern, mask), part)))
+    .join("");
 }
 
 function chatOf(caseFile: CaseFile): CaseView["chat"] {
@@ -118,7 +137,7 @@ function goalOf(caseFile: CaseFile, assetTitles: Map<string, string>): string[] 
   if (!goal) return null;
   const intent = { home: "Use the home", watch: "Use watches", unsure: "Not sure which asset to use" }[goal.intent ?? "unsure"];
   const lines = [`${formatUsd(goal.cashNeededUsd)} needed by ${goal.neededBy}`, intent];
-  if (goal.repayHorizonYears !== undefined) lines.push(`Plans to repay in ${goal.repayHorizonYears} years`);
+  if (goal.repayHorizonYears !== undefined) lines.push(`Plans to repay in ${formatYears(goal.repayHorizonYears)}`);
   if (goal.monthlyCapacityUsd !== undefined) lines.push(`Can pay ${formatUsd(goal.monthlyCapacityUsd)} a month`);
   if (goal.keepAssetIds.length > 0) lines.push(`Keeps: ${goal.keepAssetIds.map((id) => assetTitles.get(id) ?? id).join(", ")}`);
   else if (goal.keepAssetNotes?.length) lines.push(`Wants to keep: ${goal.keepAssetNotes.join(", ")}`);
@@ -305,8 +324,15 @@ function heiOf(caseFile: CaseFile, registry: Registry, kycCheck: { label: string
             `${settled.trigger === "maturity" ? "Maturity" : "Buyback"} after ${settled.years} years; home value ${formatUsd(settled.homeValueUsd)} (simulated appraisal${settled.scenario ? " that follows the real index" : ""}).`,
             ...(settled.scenario ? [`${settled.scenario}.`] : []),
             `Payout ${formatMicroUsd(BigInt(settled.payoutMicroUsd))}${settled.capApplied ? ` (the ${formatPercent(sheet.investorReturnCapPerYear * 100)} a year cap applies; uncapped ${formatUsd(settled.uncappedPayoutUsd)})` : ""}; homeowner's cost ${formatPercent(settled.ownerAnnualCost * 100)} a year.`,
-            ...(BigInt(settled.topUpMicroUsd) > BigInt(0) ? [`Simulated: ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} of the homeowner's money (savings, refinancing or a sale), minted as test dollars.`] : []),
             ...(paidIn ? [`${paidIn.by === "user wallet" ? "Your wallet" : "The homeowner (demo wallet)"} paid ${formatMicroUsd(BigInt(paidIn.amountMicroUsd))} into the HEI's settlement account.`] : []),
+            ...(BigInt(settled.topUpMicroUsd) > BigInt(0)
+              ? [
+                  paidIn?.by === "user wallet"
+                    ? `Simulated: the other ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} of the homeowner's money (savings, refinancing or a sale), added by the partner with the first payouts.`
+                    : `Simulated: the demo homeowner's ${formatMicroUsd(BigInt(settled.topUpMicroUsd))} (savings, refinancing or a sale), minted as test dollars in its payment.`,
+                ]
+              : []),
+            ...(settled.recovered ? ["Recorded from the chain: an earlier request finished the settlement but its answer was lost."] : []),
             ...settled.payouts.map(
               (payout, index) =>
                 `${caseFile.handoff?.onchain?.heiSale?.purchases[index]?.name ?? "Holder"}: ${BigInt(payout.tokens).toLocaleString("en-US")} shares burned, paid ${formatMicroUsd(BigInt(payout.receivedMicroUsd))}.`,
@@ -332,7 +358,14 @@ export function buildView(caseFile: CaseFile, registry: Registry, kycCheck = { l
     stage: caseFile.stage,
     progress: progressOf(caseFile),
     chat: chatOf(caseFile),
-    approval: caseFile.pendingApproval ? { id: caseFile.pendingApproval.id, summary: caseFile.pendingApproval.summary, needsWallet: approvalNeedsWallet(caseFile) } : null,
+    approval: caseFile.pendingApproval
+      ? {
+          id: caseFile.pendingApproval.id,
+          summary: caseFile.pendingApproval.summary,
+          needsWallet: approvalNeedsWallet(caseFile),
+          onChain: ON_CHAIN_TOOLS.includes(caseFile.pendingApproval.call.name),
+        }
+      : null,
     wallet: caseFile.wallet ? { address: caseFile.wallet.address, locked: walletLocked(caseFile) } : null,
     goal: goalOf(caseFile, new Map(assets.map((asset) => [asset.id, asset.title]))),
     assets,

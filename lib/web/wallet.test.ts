@@ -60,6 +60,16 @@ describe("connecting the user's own wallet", () => {
     await expect(walletConnect(later, { token: challenge.token, signature: await walletSignsText(wallet.keyPair, challenge.message) })).rejects.toThrow(/expired/);
   });
 
+  it("cannot change while an approval waits, since the approval names the signer", async () => {
+    const deps = depsWith([callTool("compare_paths"), say("ok"), callTool("prepare_documents"), say("ok"), callTool("record_receipt_onchain")]);
+    let current = await postMessage(deps, { token: startCase(deps, { persona: "B" }).token, text: "Compare." });
+    current = await postMessage(deps, { token: current.token, text: "Prepare." });
+    current = await postMessage(deps, { token: current.token, text: "Record." });
+    expect(current.view.approval?.summary).toContain("signed by the demo wallet");
+    const wallet = await generateKeyPairSigner();
+    expect(() => walletChallenge(deps, { token: current.token, address: wallet.address })).toThrow(/Answer the approval request first/);
+  });
+
   it("cannot change once the case has on-chain records", async () => {
     const deps = depsWith([]);
     const base = openCase(startCase(deps, { persona: "B" }).token, secret);

@@ -71,7 +71,7 @@ export function parseSignedByWallet(value: unknown): SignedByWallet {
  * Puts the wallet's transaction on the chain and waits for it: sends a signed
  * transaction, or waits for one the wallet sent. The fee payer must be the wallet.
  */
-export async function landWalletTransaction(rpc: DevnetRpc, signed: SignedByWallet, wallet: Address): Promise<Signature> {
+export async function landWalletTransaction(rpc: DevnetRpc, signed: SignedByWallet, wallet: Address, lastValidBlockHeight?: bigint): Promise<Signature> {
   if ("signature" in signed) {
     const sent = toSignature(signed.signature);
     await confirmSignature(rpc, sent);
@@ -81,15 +81,15 @@ export async function landWalletTransaction(rpc: DevnetRpc, signed: SignedByWall
   const transaction = getTransactionDecoder().decode(bytes);
   const [feePayer] = Object.keys(transaction.signatures);
   if (feePayer !== wallet) throw new Error("The signed transaction is not paid by the connected wallet");
-  return sendWireTransaction(rpc, signed.transaction as Base64EncodedWireTransaction, getSignatureFromTransaction(transaction));
+  return sendWireTransaction(rpc, signed.transaction as Base64EncodedWireTransaction, getSignatureFromTransaction(transaction), lastValidBlockHeight);
 }
 
 /** The parts of a confirmed transaction we check (from getTransaction, jsonParsed). */
 export type ParsedTransaction = {
   signers: string[];
   memos: string[];
-  /** Change of each owner's balance of each mint, in base units. */
-  tokenChanges: { mint: string; owner: string; change: bigint }[];
+  /** Change of each token account's balance, with its mint and owner, in base units. */
+  tokenChanges: { account: string; mint: string; owner: string; change: bigint }[];
 };
 
 export async function readParsedTransaction(rpc: DevnetRpc, signature: Signature): Promise<ParsedTransaction> {
@@ -104,7 +104,16 @@ export async function readParsedTransaction(rpc: DevnetRpc, signature: Signature
     .map((instruction) => instruction.parsed as string);
   const before = new Map((transaction.meta.preTokenBalances ?? []).map((item) => [item.accountIndex, BigInt(item.uiTokenAmount.amount)]));
   const tokenChanges = (transaction.meta.postTokenBalances ?? []).flatMap((item) =>
-    item.owner ? [{ mint: item.mint as string, owner: item.owner as string, change: BigInt(item.uiTokenAmount.amount) - (before.get(item.accountIndex) ?? BigInt(0)) }] : [],
+    item.owner
+      ? [
+          {
+            account: message.accountKeys[item.accountIndex]?.pubkey as string,
+            mint: item.mint as string,
+            owner: item.owner as string,
+            change: BigInt(item.uiTokenAmount.amount) - (before.get(item.accountIndex) ?? BigInt(0)),
+          },
+        ]
+      : [],
   );
   return { signers, memos, tokenChanges };
 }
@@ -112,6 +121,11 @@ export async function readParsedTransaction(rpc: DevnetRpc, signature: Signature
 /** The change of one owner's balance of one mint in the transaction (0 when untouched). */
 export function changeFor(parsed: ParsedTransaction, mint: string, owner: string): bigint {
   return parsed.tokenChanges.filter((item) => item.mint === mint && item.owner === owner).reduce((sum, item) => sum + item.change, BigInt(0));
+}
+
+/** The change of one token account in the transaction (0 when untouched). */
+export function changeForAccount(parsed: ParsedTransaction, account: string): bigint {
+  return parsed.tokenChanges.filter((item) => item.account === account).reduce((sum, item) => sum + item.change, BigInt(0));
 }
 
 // ---- Wallet proof: the user signs a message that names the case and the address. ----

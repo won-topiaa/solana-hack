@@ -76,8 +76,9 @@ export function AppFooter() {
         </div>
       </div>
       <p className="mt-10 border-t border-neutral-900 pt-6 text-xs leading-relaxed text-neutral-500">
-        Not investment or financial advice. A demo on Solana devnet: tokens and test dollars have no value. Partners (issuer, vault, KYC, appraisal, stolen-watch
-        registry) are simulated and marked as such. Use made-up details.
+        Not investment or financial advice. A demo on Solana devnet: tokens and test dollars have no value. Partners (issuer, vault, appraisal, stolen-watch
+        registry) are simulated and marked as such; investors&apos; KYC attestations are real devnet records behind a sandbox or simulated identity check. Use
+        made-up details. Home price growth comes from the FHFA House Price Index via FRED. This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
       </p>
     </footer>
   );

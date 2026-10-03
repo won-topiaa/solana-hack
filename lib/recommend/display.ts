@@ -1,7 +1,7 @@
 // Code-made text for the comparison. The model quotes these lines and never
 // writes a figure itself (CLAUDE.md §3 rule 3).
 
-import { formatUsd } from "../format";
+import { formatUsd, formatYears, pricesText } from "../format";
 import { pct } from "./realEstate";
 import type { PathOption, Recommendation } from "./types";
 
@@ -15,8 +15,8 @@ export function costText(option: PathOption, years: number): string {
     return option.scenarios
       .map(
         (scenario) =>
-          `if prices ${scenario.growth === 0 ? "stay flat" : `rise ${pct(scenario.growth)} a year`}, you pay ` +
-          `${formatUsd(scenario.payoutUsd)} at settlement in ${scenario.years} years (${pct(scenario.effectiveAnnualCost)} a year)`,
+          `if prices ${pricesText(scenario.growth)}, you pay ` +
+          `${formatUsd(scenario.payoutUsd)} at settlement in ${formatYears(scenario.years)} (${pct(scenario.effectiveAnnualCost)} a year)`,
       )
       .join("; ");
   }
@@ -24,7 +24,7 @@ export function costText(option: PathOption, years: number): string {
   if (option.lane === "watch" && option.monthlyPaymentUsd === undefined) {
     return `${formatUsd(option.totalCostUsd)} below market value at most`;
   }
-  return `about ${formatUsd(option.totalCostUsd)} over ${years} years`;
+  return `about ${formatUsd(option.totalCostUsd)} over ${formatYears(years)}`;
 }
 
 /** Said wherever a recommendation rests on a frozen registry (judging period). */

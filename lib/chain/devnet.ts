@@ -8,6 +8,7 @@ import {
   createHeiShareMint,
   createWatchToken,
   ensureFeeSol,
+  fundDemoWallet,
   explorerAddressUrl,
   explorerTxUrl,
   recordReceiptMemo,
@@ -61,8 +62,13 @@ export function createDevnetChain(rpc: DevnetRpc, wallets: { issuer: KeyPairSign
 
   return {
     async recordReceipt(memo) {
+      // A retried approval (a lost answer, a reload) finds the receipt it already wrote:
+      // the memo holds the receipt's hashes, so the same text means the same receipt.
+      const recent = await rpc.getSignaturesForAddress(wallets.user.address, { commitment: "confirmed", limit: 50 }).send();
+      const earlier = recent.find((entry) => entry.err === null && entry.memo?.includes(memo));
+      if (earlier) return record([earlier.signature]);
       await requireFunds(rpc, wallets.issuer.address);
-      await ensureFeeSol(rpc, wallets.issuer, wallets.user.address);
+      await fundDemoWallet(rpc, wallets.issuer, wallets.user.address);
       const signature = await recordReceiptMemo(rpc, wallets.user, memo);
       return record([signature]);
     },

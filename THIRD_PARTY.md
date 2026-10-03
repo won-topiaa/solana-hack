@@ -21,9 +21,14 @@ Last updated: 2026-10-02 (the user's own wallet; FHFA house price index).
 | @solana-program/memo | 0.15.0 | Apache-2.0 | https://github.com/solana-program/memo |
 | lucide-react | 1.50.0 | ISC; icons derived from Feather are MIT (both texts in `node_modules/lucide-react/LICENSE`) | https://github.com/lucide-icons/lucide |
 | @solana/kit-plugin-wallet | 0.20.0 | MIT | https://github.com/anza-xyz/kit-plugins |
-| @solana/react | 8.4.0 | MIT | https://github.com/anza-xyz/kit |
+| @solana/react | 8.4.0 | MIT (an optional peer of @solana/kit-plugin-wallet's React hooks) | https://github.com/anza-xyz/kit |
 | @solana/sysvars | 8.4.0 | MIT | https://github.com/anza-xyz/kit |
-| sas-lib | 2.0.0-beta.1 | MIT (the repository's LICENSE; the package itself has no license field). Installed with an npm `overrides` entry so it uses our @solana/kit 8.4 instead of its declared peer ^7 (checked: it builds and runs) | https://github.com/solana-foundation/solana-attestation-service |
+| sas-lib | 2.0.0-beta.1 | MIT, Copyright (c) 2025 Solana Foundation (the repository's LICENSE; the package itself has no license field). Installed with an npm `overrides` entry so it uses our @solana/kit 8.4 instead of its declared peer ^7 (checked: it builds and runs) | https://github.com/solana-foundation/solana-attestation-service |
+
+Notable licenses further down the dependency tree (none is shipped as our code): caniuse-lite
+(CC-BY-4.0, browser data used at build time), lightningcss and axe-core (MPL-2.0, build and lint
+tools), @img/sharp-libvips (LGPL-3.0-or-later, an optional part of Next.js image handling, which this
+app does not use), argparse (Python-2.0, a development tool).
 
 ## Development dependencies
 
@@ -84,4 +89,5 @@ owners' own terms above allow use with attribution. Re-check before a public lau
 
 | File | Origin |
 |---|---|
+| `app/icon.svg`, the mark in `components/AppHeader.tsx` | Made for this project. |
 | `data/demo/watch-photos/demo-warranty-card.png` | Made for this project: rendered from `demo-warranty-card.svg` (our own file) with macOS Quick Look. Made-up maker, reference and serial; no logos. |

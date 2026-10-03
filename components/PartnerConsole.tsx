@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { callApi, caseSnapshot, parseCase, postJson, serverCaseSnapshot, storeCase, subscribeCase, type CaseReplyJson } from "./caseStore";
 import { ChainRecord, DevnetTag, ErrorNote, Frame, IconBox, Lines, PrimaryButton, SimulatedTag } from "./ui";
-import { shortAddress, signWithWallet } from "./wallet";
+import { connectedTo, shortAddress, signWithWallet } from "./wallet";
 import { WalletBar } from "./WalletBar";
 
 function linkIcon(label: string): ReactNode {
@@ -67,6 +67,7 @@ export function PartnerConsole() {
     return attempt("Preparing your settlement payment on devnet..", async () => {
       const wallet = current?.view.wallet;
       if (!current || !wallet) return;
+      connectedTo(wallet.address); // before the server does any work
       type Prepared = CaseReplyJson & { payment: { transaction: string } | null };
       const prepared = await postJson<Prepared>("/api/hei/settlement/prepare", { token: current.token, scenario });
       storeCase({ token: prepared.token, view: prepared.view });
@@ -115,7 +116,7 @@ export function PartnerConsole() {
     <Frame className="border-t">
       {header}
       <div className="border-b border-neutral-800 px-6 py-3 sm:px-10">
-        <WalletBar token={current.token} view={current.view} busy={Boolean(busy)} onError={setError} />
+        <WalletBar token={current.token} view={current.view} busy={busy} setBusy={setBusy} onError={setError} />
       </div>
       {(error || busy) && (
         <div className="space-y-3 border-b border-neutral-800 px-6 py-4 sm:px-10">
@@ -146,10 +147,10 @@ export function PartnerConsole() {
                 {
                   icon: <ShieldCheck size={18} strokeWidth={1.75} />,
                   title: "KYC",
-                  text: `${hei.kycCheck.label}, then a KYC attestation on Solana (Solana Attestation Service), checked on-chain before a share account opens. A third buyer has none and stays frozen.`,
+                  text: `${hei.kycCheck.label}, then a KYC attestation on Solana (Solana Attestation Service), read from the chain and checked by the issuer before it opens a share account. A third buyer has none and stays frozen.`,
                   tag: hei.kycCheck.simulated ? <SimulatedTag label="Simulated identity check" /> : <SimulatedTag label="Sandbox test identity" />,
                 },
-                { icon: <ArrowRightLeft size={18} strokeWidth={1.75} />, title: "Purchases", text: "Dollars and shares move in one transaction; the buyer without KYC is refused by the token.", tag: null },
+                { icon: <ArrowRightLeft size={18} strokeWidth={1.75} />, title: "Purchases", text: "Dollars and shares move in one transaction; the buyer without KYC is refused by the token.", tag: <SimulatedTag label="Simulated investors" /> },
               ].map((item) => (
                 <div key={item.title} className="space-y-3 bg-black p-5">
                   <IconBox>{item.icon}</IconBox>
@@ -198,10 +199,10 @@ export function PartnerConsole() {
           <>
             <p className="mb-5 max-w-[720px] text-sm leading-relaxed text-neutral-400">
               {hei.usesWallet && current.view.wallet
-                ? `Your wallet (${shortAddress(current.view.wallet.address)}) pays the capped payout into this HEI's settlement account; you sign it in your wallet. `
+                ? `Your wallet (${shortAddress(current.view.wallet.address)}) pays the test dollars it holds toward the capped payout into this HEI's settlement account; you sign it in your wallet, and the partner adds the simulated rest. `
                 : "The homeowner (demo wallet) pays the capped payout into this HEI's settlement account. "}
-              Then, for each holder, one transaction pays its share and burns its tokens. No time passes on devnet: pick when the HEI settles; the home&apos;s
-              value then follows the real FHFA house price index over that many past years.{" "}
+              Then each holder is paid its share and its tokens are burned in the same transaction (up to four holders per transaction). No time passes on
+              devnet: pick when the HEI settles; the home&apos;s value then follows the real FHFA house price index over that many past years.{" "}
               <SimulatedTag label="Simulated time and appraisal" />
             </p>
             <fieldset className="mb-6 grid gap-3 sm:grid-cols-2" disabled={!hei.canSettle || Boolean(busy)}>
@@ -216,13 +217,16 @@ export function PartnerConsole() {
                 </label>
               ))}
             </fieldset>
+            <p className="-mt-3 mb-6 text-[11px] text-neutral-500">
+              Home price growth: FHFA All-Transactions House Price Index for the United States (USSTHPI), via FRED. This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+            </p>
             <PrimaryButton
               arrow
               disabled={Boolean(busy) || !hei.canSettle || !chosen}
               onClick={() => {
                 if (!chosen) return;
                 if (hei.usesWallet) {
-                  const question = `Settle on Solana devnet: ${chosen.label}? Your wallet will ask you to sign the payment (test dollars; any shortfall is minted to it first, simulated).`;
+                  const question = `Settle on Solana devnet: ${chosen.label}? Your wallet will ask you to sign a payment of the test dollars it holds; the rest of the payout is simulated.`;
                   if (window.confirm(question)) void settleWithWallet(chosen.id);
                 } else if (window.confirm(`Settle on Solana devnet: ${chosen.label}? The homeowner's demo wallet pays and the shares are burned.`)) {
                   void run("Settling on devnet: paying holders and burning shares..", "/api/hei/settlement", { scenario: chosen.id });

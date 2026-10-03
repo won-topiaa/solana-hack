@@ -120,6 +120,20 @@ describe("watch photos (M5 done-when: a photo of a demo watch fills WatchAsset)"
     expect(seen).toEqual([]);
     expect(turn.caseFile.assets).toEqual([]);
   });
+
+  it("reads a photo into one watch only, even if the model asks twice in one turn", async () => {
+    const { vision, seen } = fakeVision();
+    const { caseFile, photoId } = caseWithPhoto();
+    const twice = { text: "", toolCalls: [
+      { name: "read_watch_photos", args: { photoIds: [photoId] }, providerCallId: "a" },
+      { name: "read_watch_photos", args: { photoIds: [photoId] }, providerCallId: "b" },
+    ] };
+    const llm = createScriptedLlm([twice, say("Saved.")]);
+    const turn = await sendUserMessage(caseFile, "uploaded", { llm, tools: toolsWith(vision), now });
+    expect(seen).toEqual([1]); // the photo was read once
+    expect(turn.caseFile.assets.map((asset) => asset.id)).toEqual(["watch-1"]);
+    expect(JSON.stringify(llm.requests.at(-1)?.messages.at(-1))).toContain("Already read into watch-1");
+  });
 });
 
 describe("typed watch details (no photos)", () => {

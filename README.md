@@ -12,8 +12,10 @@ receipt and issue tokens on Solana.
 - **Source:** this repository (MIT license)
 
 > Not investment or financial advice. This is a demo on Solana **devnet**: tokens and test dollars
-> have no value. Partners (issuer, vault, KYC, appraisal, stolen-watch registry) are simulated and
-> marked "Simulated" in the app. Use made-up details.
+> have no value. Partners (issuer, vault, appraisal, stolen-watch registry) are simulated and marked
+> "Simulated" in the app. Investors' KYC attestations are real Solana Attestation Service records on
+> devnet; the identity check behind them uses Plaid's sandbox test identity (on the live demo) or a
+> labeled simulated check. Use made-up details.
 
 ---
 
@@ -34,7 +36,7 @@ receipt and issue tokens on Solana.
 1. **Goal.** Amount, date, repayment horizon, monthly budget, assets to keep, and which asset you
    want to use: your home, a watch, or "not sure".
 2. **Assets.** A home by address (value range and an owner check); the mortgage balance (typed, or
-   read from the lender through Plaid's sandbox when run locally). Watches from photos: the model
+   read from the lender through Plaid's sandbox test data, after you approve). Watches from photos: the model
    reads maker, model, reference, box and papers; the serial number is kept private and only a
    salted hash is used. A stolen-watch check (simulated).
 3. **Compare every path** for the goal, with cash now, monthly payment, total cost over the horizon,
@@ -68,8 +70,13 @@ receipt and issue tokens on Solana.
    behind every number).
 6. **On-chain steps, one at a time, each after your approval:** record the receipt; then issue the
    HEI share tokens, or the watch's 1-of-1 token after a (simulated) vault intake.
-7. **Partner steps** (simulated partner): KYC, the payment to the homeowner at closing, the primary
-   sale to investors, and the settlement that pays every holder and burns their tokens.
+7. **Partner steps** (simulated partner): KYC with on-chain attestations, the payment to the homeowner
+   at closing, the primary sale to investors, and the settlement that pays every holder and burns
+   their tokens.
+
+The case panel shows the comparison as charts (cash now against the goal, the monthly payment
+against the budget, the total cost), the HEI's payback by settlement year with its cap, the
+ownership split, and where the case stands.
 
 The model (Google Gemini) handles the conversation and reads photos. **It never computes or
 invents a number:** in the web app it writes no figures at all, and in the terminal it quotes
@@ -88,13 +95,20 @@ screen comes from code and from a parameter registry with sources and dates.
    the same number of past years). The page reads the settlement transactions back from devnet and
    checks that every holder was paid its share and every token was burned.
 
-**Use your own wallet (optional).** With Phantom (or another Wallet Standard wallet) in
-**Testnet Mode** on Solana devnet
-([how](https://docs.phantom.com/developer-powertools/testnet-mode)), click *Connect* above the chat
-after starting a case. Your wallet signs a short message that ties it to the case (no money moves),
-then signs the receipt itself, receives the closing payment or the watch token, and signs the HEI
-settlement payment. The app sends it a little devnet SOL for fees. Without a wallet, a demo wallet on
-the server signs for you.
+**Use your own wallet (optional).**
+
+1. In Phantom (or another Wallet Standard wallet): Settings → Developer Settings → **Testnet Mode**
+   on, choose **Solana Devnet** ([how](https://docs.phantom.com/developer-powertools/testnet-mode)),
+   then reload the page.
+2. Start a case and click *Connect* at the top of it, **before** recording the receipt (after that
+   the case stays with the wallet that signed). Your wallet signs a short message that ties it to the
+   case; no money moves.
+3. From then on your wallet signs the receipt itself, receives the closing payment or the watch
+   token, and at settlement signs a payment of the test dollars it holds (the simulated rest of the
+   payout is added by the partner). The app sends a new wallet 0.002 devnet SOL for fees, once. Open
+   the Partner page in the same tab.
+
+Without a wallet, a demo wallet on the server signs for you.
 
 Other personas: A (watches, cash by tomorrow, keeps the sport watch), B2 (same home, repays in
 2 years → HELOC), C and D (not sure which asset). You can also start an empty case and add a watch
@@ -117,6 +131,11 @@ $2,000), investor return capped at 20% a year.
 | 10 years | flat | $234,131 | 4.55% |
 | 10 years | +3% a year | $314,652 | 7.69% |
 
+The comparison uses two fixed price scenarios (flat and +3% a year). The settlement demo on the
+partner page instead follows the FHFA house price index over the same number of past years
+(+3.41% a year over 2 years and +6.81% a year over 10 years, to 2026-04-01): the 2-year buyback is
+the same, since the cap applies; a 10-year maturity then pays about $452,648 (11.68% a year).
+
 That is why the rules send a 2-year borrower to a HELOC (RE-1) and a 10-year borrower with no
 monthly budget to the HEI (RE-2). On-chain, money moves in micro-dollars: each holder gets
 floor(payout × tokens / N), so with two investors holding 150,000 and 84,131 tokens a 2-year
@@ -127,16 +146,19 @@ buyback pays exactly $144,000.069760 and $80,765.799126.
 - **A recommendation you can check later.** The receipt (hashes and the registry version, no
   personal data) is written on-chain when you approve, so anyone holding the documents can prove what
   was recommended, on which numbers, and what you chose.
-- **Compliance enforced by the token.** HEI share accounts start **frozen**; only accounts the issuer
-  opens after KYC can hold shares. A buyer without KYC is refused by the token program itself.
+- **Compliance enforced by the token.** HEI share accounts start **frozen**. The issuer opens one only
+  after reading the wallet's KYC attestation (Solana Attestation Service) from the chain and checking
+  it; a buyer without one is refused by the token program itself.
 - **Delivery against payment.** Each purchase is one transaction: the buyer's dollars and the shares
   move together, or nothing moves.
-- **A fair, final settlement.** In one transaction per batch, the homeowner pays each holder its
-  pro-rata share and that holder's tokens are burned. No holder is burned without being paid.
+- **A fair, final settlement.** The homeowner pays the payout once into the HEI's own settlement
+  account; holders are then paid from it, each in the same transaction as the burn of its tokens (up
+  to four holders per transaction). No holder is burned without being paid.
 - **Fixed supply and locked metadata.** After minting, the HEI supply can never grow, and the
   passport and recommendation hashes written into the token can never be changed.
-- **Liquidity for a watch in a vault.** The 1-of-1 token stands for the vaulted watch; it can be
-  sold or used as collateral, and burning it releases the watch.
+- **Liquidity for a watch in a vault.** The 1-of-1 token stands for the vaulted watch; with a real
+  vault partner it could be sold or used as collateral, and burning it would release the watch (the
+  demo simulates the intake and has no redemption step).
 
 ## What goes on-chain (Solana devnet)
 
@@ -148,19 +170,22 @@ buyback pays exactly $144,000.069760 and $80,765.799126.
 | KYC | An identity check (Plaid Identity Verification in sandbox, or a simulated check, named as such), then a Solana Attestation Service attestation for the investor's wallet (credential `ownflow-kyc-demo`, schema `investor-kyc`: provider, a hash of the check's id, the time; valid one year). The issuer reads the attestation back from the chain and checks issuer, wallet, schema and expiry by the chain's clock before it thaws the investor's share account; a wallet without one stays frozen | Issuer (demo attestation issuer) |
 | Closing | Test-dollar payment to the homeowner, with a memo naming the HEI and a once-only marker account (created "with seed" from the issuer), so a second closing payment for the same HEI fails on-chain | Issuer |
 | Primary sale | One transaction: the buyer's test dollars are minted (simulated investor money), paid to the issuer, and the shares go to the buyer | Buyer + issuer |
-| Settlement | (1) The homeowner pays the payout into the HEI's own settlement account (memo names the HEI and the amount; any shortfall is minted to the homeowner first, simulated). (2) For each holder: payment from the settlement account + burn of that holder's shares, in one transaction. Refused once every share is burned | (1) Your own wallet, or the demo wallet; (2) issuer (permanent delegate) and the HEI's servicer key |
+| Settlement | (1) The homeowner pays into the HEI's own settlement account, owned by a servicer key the issuer derives per HEI (memo names the HEI and the amount). Your own wallet pays the test dollars it holds; the demo wallet pays all of it, minted in the same transaction, with a once-only marker. (2) Holders are paid from the settlement account, each in the same transaction as the burn of its shares (up to four per transaction); the simulated rest of a wallet's payout is added in the first of these. Refused once every share is burned; a lost answer is rebuilt from these transactions | (1) Your own wallet, or the demo wallet; (2) issuer (permanent delegate) and the HEI's servicer key |
 
 **Off-chain:** addresses, names, serial numbers, photos, the case file, the comparison and the term
 sheet. Only their hashes go on-chain.
 
-Sample records from one run (devnet):
-[receipt](https://explorer.solana.com/tx/2jawU4sGBacUu3fPtYd58U441Mev3qPCx8ktfQFejrJ9WmEJQ2t3UTS2eFDLMJZF7w2qimqqnt73oRjdjXLj5sV9?cluster=devnet) ·
-[HEI share token](https://explorer.solana.com/address/5LyafEJ95HWd7Jm8MsuFKNP2aiHHkpx1t2ciN2cB4fkZ?cluster=devnet) ·
-[closing](https://explorer.solana.com/tx/65WYs5vuFwBrbFhH4Sg87fcpSd7rHepiNjQ5WHcWHFYwAQG56rX1oaXecH3NVKW8pQtjBwzAMLHhEXbBjXKXLehe?cluster=devnet) ·
-[purchase 1](https://explorer.solana.com/tx/4HSrKhQ2bss4AxVxY2D4YZ676idd859u3uuTPQapqYEeNwC7hBPLZeJBynv9QoQwV5ZrBt6Y9iYT4kfhpYGWxP9R?cluster=devnet) ·
-[purchase 2](https://explorer.solana.com/tx/2AtmQqBBX5qWAHKECzwB25uuBmEiofbhF9B5nT1f94qy1okP5fLKSp6zScJM3HgBchu5fTfP5KWdEzuUdQYxY5h3?cluster=devnet) ·
-[account without KYC (frozen)](https://explorer.solana.com/address/2cWw1duekXpwfzAkeHPyA4p9urd3JmG5sDo7euUqueGi?cluster=devnet) ·
-[settlement](https://explorer.solana.com/tx/2SQiQJF3e5d7T5Sg3bqMCCn1w8DubvC4pa5Vmfo2g2fgTcFTWsuZyeMsFGYHEjuAydPVeG7BVphrBxWV8RQzvXcn?cluster=devnet) ·
+Sample records from one run (devnet, demo wallets):
+[receipt](https://explorer.solana.com/tx/3EMoBupSBVgUUJHUS2AiLDkBCmT4BvZVcxPZAai7mUgntbvY3PfBMwyAt6DPv5DVqhPxz9tYRJXyF7PpRMj6iDVD?cluster=devnet) ·
+[HEI share token](https://explorer.solana.com/address/8daAAchztT2yvzpWSrPpe1NGZyeA8FSDH2HygUwXWaDP?cluster=devnet) ·
+[KYC attestation 1](https://explorer.solana.com/address/2VdQoqGxL7RHjEYfAu6v6fBH63q4nUgtoGFZRkk6MoNg?cluster=devnet) ·
+[KYC attestation 2](https://explorer.solana.com/address/8PrSbHFbx2k4RW3ewXjph2ETX62fB8hrPfB8rSjwmjaQ?cluster=devnet) ·
+[closing](https://explorer.solana.com/tx/56CHApNrjJZYdxQkqTkUzuoQeUGu5Gk9LjXUTLTmRtkPymLKKtQpZJNVXH27WeYuzMAK5Vr5WMZNxXWjxu3pH3en?cluster=devnet) ·
+[purchase 1](https://explorer.solana.com/tx/4qe7azeCY86dWUamWfv2jqDNCGnQDg2XJcJd5xnwaKNi37CuFwgarToUqrfeG8WFJjW6hVyqnfTXypjB68pQ2D7?cluster=devnet) ·
+[purchase 2](https://explorer.solana.com/tx/5Du8tGcvFAoZE9znuraKZ7YvwAC1SrEmmk8iH8A82cmsuVqgjeucy6rFZ3F5mqAyyL73LkUrjKFZM3uXHZhjjTKR?cluster=devnet) ·
+[account without KYC (frozen)](https://explorer.solana.com/address/4p1JmcBEhSrErZw6xRGnqh9D1TrsNWh7f1LQyvfu9Xoo?cluster=devnet) ·
+[homeowner's payment into the settlement account](https://explorer.solana.com/tx/4L8zjsxsgapWqQKopVtDCrZXBpAWi6m8K5AqADkxbLbwJGjMh22zhXVSUCx8MnoU7Q8ax2GYGnhyWWoaJbt22yTp?cluster=devnet) ·
+[payout + burn](https://explorer.solana.com/tx/4W2sc6WHeYBhzTwAa3jxKpWKpc7pMxdanP4DsX8pgXEP73j28qnntGAoAwqxsmEPeqBPXFGed29qPxQrSdrjdnru?cluster=devnet) ·
 [watch 1-of-1 token](https://explorer.solana.com/address/H9LZ68ws32rG1YSuFR2UdVNyjyqm7MSB3dLzFXFpp1av?cluster=devnet) ·
 [test dollar](https://explorer.solana.com/address/EkYSihFm4a6uz6yVDsYUg9nzJdXTFEayyPr9uM1XHfks?cluster=devnet)
 (devnet can be reset, which would remove them).
@@ -176,16 +201,16 @@ Sample records from one run (devnet):
   configured, otherwise simulated. The appraisal at settlement follows real data: the FHFA
   All-Transactions House Price Index (FRED `USSTHPI`), growing at the index's actual yearly rate
   over the same number of past years.
-- **Time.** Devnet does not wait years: the settlement page lets you pick when the HEI settles; the
-  homeowner's money for the payout is minted to the homeowner before it pays (labeled).
-  The partner's money at closing and the investors' money are minted the same way, inside the
-  transaction that spends them, so two demo runs at once never mix up the shared wallets' balances.
+- **Time and money behind the payments.** Devnet does not wait years: the settlement page lets you
+  pick when the HEI settles. The homeowner's money beyond what its wallet holds, the partner's money
+  at closing and the investors' money are test dollars minted inside the transaction that uses them
+  (labeled), so two demo runs at once never mix up the shared wallets' balances.
 - **Money.** Payments use "Demo USD (DUSD)", a devnet test token with no value and 6 decimals like
   USDC. Circle's devnet USDC faucet gives 20 USDC per address every 2 hours, far below a $150,000
   sale; the code takes the payment token as data so a real stablecoin could replace it.
 - **Homes in the live demo** are made-up records in RentCast's response format
-  (`data/demo/properties.json`); watch values come from a made-up price table. Local runs can use
-  RentCast and Plaid's sandbox with your own keys.
+  (`data/demo/properties.json`); watch values come from a made-up price table. Plaid (mortgage and
+  identity) runs on its sandbox with test data. Local runs can use RentCast with your own key.
 - **Wallets.** The investors and the issuer are demo wallets held by the server. The user can
   connect their own wallet (Phantom in Testnet Mode); otherwise a demo wallet stands in and your
   approval in the app stands for your signature.
@@ -194,7 +219,8 @@ Sample records from one run (devnet):
 
 - **The issuer is trusted** in this design: it keeps the freeze authority (to run the KYC allowlist)
   and is the permanent delegate (to burn shares at settlement). The token program would let it burn
-  without paying; Ownflow's code only burns in the same transaction as the payment.
+  without paying; Ownflow's code only burns in the same transaction as the payment. The same demo
+  issuer writes the KYC attestations and checks them before it opens an account.
 - **The registry is trusted to be accurate.** Every number comes from `data/params.json`, where each
   value has a source, a date and a validity window. A recommendation is refused when a value it uses
   is out of date. For the judging period the deployed demo freezes the values on one date and says so
@@ -203,17 +229,20 @@ Sample records from one run (devnet):
   hashes or links, and any amount or rate it writes anyway is replaced before the page shows it; the
   panel shows code-made text. Tools that act (on-chain steps, a bank connection, a
   registry check) never run before you approve them.
-- **The server keeps no case.** Your case travels in your browser as a token sealed with AES-256-GCM;
-  the browser can neither read nor change it.
+- **The server keeps no case.** Your case travels in your browser as a token sealed with AES-256-GCM,
+  which the browser cannot read or change; the tab also keeps a readable copy of your chat and panel
+  for display.
 - **Legal status.** HEIs and HEI-backed tokens raise consumer-credit and securities questions. This
   is a proof of concept; a real launch would go through a licensed partner and legal review.
 
 ## Limits on the public demo
 
-40 messages and 6 photos per case, on-chain steps paused when the demo wallet runs low on devnet
-SOL, and a per-IP rate limit on the API. Devnet's public RPC can be busy; calls are retried with a
+40 messages and 6 photos per case, at most four tool calls per model reply, on-chain steps paused
+when the demo wallet runs low on devnet SOL, a one-time 0.002 SOL fee top-up per connected wallet, and
+a per-IP rate limit on the API. Devnet's public RPC can be busy; calls are retried with a
 time limit. Every on-chain step can be run again safely: issuance finds the token it already made,
-the closing payment happens once, the sale skips what is done, and a settled HEI cannot settle again.
+the closing payment and the demo homeowner's payment happen once, the sale skips what is done, and a
+settled HEI cannot settle again (a lost answer is rebuilt from the chain).
 
 ## Architecture
 
@@ -235,7 +264,10 @@ Next.js route handlers (Vercel functions)
 | `lib/calc/` | Money math and its tests |
 | `lib/recommend/` | Comparison, rules, documents, demo personas |
 | `lib/chain/` | Solana: mints, receipt, KYC, sale, settlement, test dollar, wallets |
-| `lib/web/` | Sealed case token, the view sent to the browser, request handlers |
+| `lib/web/` | Sealed case token, the view sent to the browser, chart data, request handlers |
+| `lib/params/` | Parameter registry loader, freshness checks, FRED refresh |
+| `lib/integrations/` | RentCast, Plaid (mortgage, identity verification), Gemini vision, simulated stolen-watch check |
+| `lib/assets/` | Asset types, serial hashing, owner match, watch price table |
 | `data/` | `params.json` (registry), demo homes, watches, personas |
 | `scripts/` | Terminal chat, devnet scripts, registry tools |
 
@@ -251,21 +283,27 @@ npm run chain:wallets        # creates the devnet demo wallets in .wallets/devne
 npm run dev                  # http://localhost:3000
 ```
 
+Market values in the registry expire after a few days by design, and a recommendation is refused
+when a value it uses is out of date. To run with the values as of the submission, set
+`REGISTRY_FROZEN_ON=<registry date>` in `.env.local` (the deployed demo does the same), or refresh them
+(`npm run params:refresh`; the HELOC averages are entered by hand).
+
 | Command | What it does |
 |---|---|
 | `npm run dev` | The web app |
 | `npm test` | Unit tests (Vitest), including the worked examples above |
 | `npm run agent:chat` | The agent in the terminal; `/photo <path>` adds a watch photo |
-| `npm run chain:demo` | Receipt + HEI shares + KYC, and receipt + watch token, on devnet |
-| `npm run chain:hei` | The whole HEI on devnet: issuance, closing, sale, settlement; `-- --years 10 --growth 0.03` for maturity |
+| `npm run chain:demo` | Receipt + HEI shares + KYC attestation and allowlist, and receipt + watch token, on devnet |
+| `npm run chain:hei` | The whole HEI on devnet: issuance, KYC, closing, sale, settlement; `-- --years 10 --growth 0.03` for maturity |
 | `npm run params:check` | How fresh each registry value is today |
 | `npm run params:refresh` | Refresh market values from FRED (needs `FRED_API_KEY`) |
 | `npm run lint`, `npm run build` | ESLint; production build with the type check |
 
-Settings (see `.env.example`): `GEMINI_API_KEY` (required), `CASE_SECRET` (required for the web
-app), `RENTCAST_API_KEY` or `PROPERTY_DATA_SOURCE=demo`, `PLAID_CLIENT_ID` + `PLAID_SECRET`
-(sandbox), `SOLANA_RPC_URL`, `REGISTRY_FROZEN_ON` (deployment for the judging period), and on a
-host without the wallet files `DEVNET_WALLET_<NAME>` and `DEVNET_TEST_DOLLAR_MINT`.
+Settings (see `.env.example`): `GEMINI_API_KEY` (required), `GEMINI_MODEL`, `CASE_SECRET` (required
+for the web app), `RENTCAST_API_KEY` or `PROPERTY_DATA_SOURCE=demo`, `PLAID_CLIENT_ID` + `PLAID_SECRET`
+(sandbox) and `PLAID_IDV_TEMPLATE_ID` (investor KYC), `FRED_API_KEY` (registry refresh),
+`SOLANA_RPC_URL`, `REGISTRY_FROZEN_ON` (values as of one date), and on a host without the wallet
+files `DEVNET_WALLET_<NAME>` and `DEVNET_TEST_DOLLAR_MINT`.
 
 ## Data sources and notices
 
@@ -275,6 +313,8 @@ host without the wallet files `DEVNET_WALLET_<NAME>` and `DEVNET_TEST_DOLLAR_MIN
   return cap and the eligibility cap are this project's design values.
 - Watch paths: published dealer, marketplace and lender terms (sources in `data/params.json`).
 - Home records and values: RentCast API when a key is set; otherwise made-up demo records.
+- Home price growth for the settlement demo: FHFA All-Transactions House Price Index for the United
+  States (`USSTHPI`), via FRED.
 - This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of
   St. Louis. Mortgage rate averages: Source: Freddie Mac Primary Mortgage Market Survey. The SOFR is
   subject to the Terms of Use posted at newyorkfed.org; see [THIRD_PARTY.md](THIRD_PARTY.md) for the

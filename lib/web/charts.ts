@@ -4,7 +4,7 @@
 
 import type { CaseFile } from "../agent/types";
 import { homeValueAfterYears, settle } from "../calc/settlement";
-import { formatPercent, formatUsd } from "../format";
+import { formatPercent, formatUsd, formatYears, pricesText } from "../format";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import type { PathOption, Recommendation } from "../recommend/types";
 
@@ -97,7 +97,7 @@ export function comparisonChart(rec: Recommendation): ComparisonChart {
   }
   if (costs.length > 0) {
     const notes = [
-      growths ? `HEI: from prices flat to ${growths.map((growth) => (growth === 0 ? "" : `+${formatPercent(growth * 100)} a year`)).filter(Boolean).join(", ")}.` : null,
+      growths ? `HEI: the bar runs from prices that ${pricesText(Math.min(...growths))} to prices that ${pricesText(Math.max(...growths))}.` : null,
       unpublished > 0 ? "Watch loans: rates are not published, so no cost is shown." : null,
     ].filter((item): item is string => item !== null);
     panels.push({ title: `Total cost over ${yearsText(years)}`, bars: costs, line: null, note: notes.length > 0 ? notes.join(" ") : null });
@@ -105,10 +105,7 @@ export function comparisonChart(rec: Recommendation): ComparisonChart {
   return { panels };
 }
 
-function yearsText(years: number): string {
-  if (years < 1) return `${Math.round(years * 12)} months`;
-  return years === 1 ? "1 year" : `${Number(years.toFixed(2))} years`;
-}
+const yearsText = formatYears;
 
 // ---- The HEI over time ----------------------------------------------------------
 
@@ -130,7 +127,7 @@ export type HeiChart = {
 const CURVE_STEPS = 40;
 
 function scenarioName(growth: number): string {
-  return growth === 0 ? "Prices flat" : `Prices ${growth > 0 ? "+" : ""}${formatPercent(growth * 100)} a year`;
+  return growth === 0 ? "Prices flat" : `Prices ${growth > 0 ? "+" : "-"}${formatPercent(Math.abs(growth) * 100)} a year`;
 }
 
 /**

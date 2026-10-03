@@ -211,3 +211,30 @@ describe("a registry frozen for the judging period", () => {
     expect(() => freezeRegistry(testRegistry(), "12/01/2026", later)).toThrow(/YYYY-MM-DD/);
   });
 });
+
+describe("edge cases found in the audit (2026-10-03)", () => {
+  function recommendWith(id: string, change: (file: ReturnType<typeof personaCase>) => ReturnType<typeof personaCase>): Recommendation {
+    const result = recommend(change(personaCase(id, now)), testRegistry(), TODAY, now);
+    if (result.status !== "ok") throw new Error(`expected ok, got ${result.status}`);
+    return result.recommendation;
+  }
+
+  it("counts a 6-month repayment as 180 days, so the watch loan (at most 180 days) still fits", () => {
+    const rec = recommendWith("A", (file) => ({ ...file, goal: file.goal && { ...file.goal, repayHorizonYears: 0.5 } }));
+    expect(rec.chosenId).toBe("watch-plan"); // loan on the sport watch + dealer sale of the dress watch
+    expect(rec.rulesFired).toContain("W-3");
+    expect(option(rec, "w-loan-watch-1").whyNotSuitable ?? "").not.toContain("180 days");
+  });
+
+  it("refuses an HEI when the mortgage plus the investors' share of the home is more than the home is worth", () => {
+    // $1,000,000 home, $800,000 mortgage: investors paying $156,087 own 23.41% ($234,131), past the $200,000 of equity.
+    const rec = recommendWith("B", (file) => ({
+      ...file,
+      assets: file.assets.map((asset) => (asset.kind === "real_estate" ? { ...asset, mortgageBalanceUsd: 800_000 } : asset)),
+    }));
+    const hei = option(rec, "re-hei");
+    expect(hei.suitable).toBe(false);
+    expect(hei.whyNotSuitable).toContain("The mortgage plus this investors' share would be 103.41% of the home's value");
+    expect(rec.chosenId).not.toBe("re-hei");
+  });
+});

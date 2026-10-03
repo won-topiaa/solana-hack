@@ -9,6 +9,22 @@ export function formatUsd(amount: number): string {
   return usd.format(amount);
 }
 
+/** A length of time, the same everywhere: 10 -> "10 years", 1 -> "1 year", 4/3 -> "1.33 years", 0.25 -> "3 months". */
+export function formatYears(years: number): string {
+  if (years < 1) {
+    const months = Math.max(1, Math.round(years * 12));
+    return months === 1 ? "1 month" : `${months} months`;
+  }
+  const rounded = Number(years.toFixed(2));
+  return rounded === 1 ? "1 year" : `${rounded} years`;
+}
+
+/** A price scenario in words: 0 -> "stay flat", 0.03 -> "rise 3% a year", -0.02 -> "fall 2% a year". */
+export function pricesText(growth: number): string {
+  if (growth === 0) return "stay flat";
+  return `${growth > 0 ? "rise" : "fall"} ${formatPercent(Math.abs(growth) * 100)} a year`;
+}
+
 /** For chart axes: 150000 -> "$150k", 1200000 -> "$1.2M", 900 -> "$900". */
 export function formatUsdCompact(amount: number): string {
   const abs = Math.abs(amount);

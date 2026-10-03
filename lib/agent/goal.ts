@@ -36,8 +36,8 @@ export function checkGoal(raw: Record<string, unknown>, today: string): GoalChec
   } else if (daysBetween(today, neededBy) < 0) {
     problems.push(`neededBy (${neededBy}) is in the past; today is ${today}`);
   }
-  if (repayYears !== undefined && (!isFiniteNumber(repayYears) || repayYears < 0)) {
-    problems.push("repayHorizonYears must be zero or more");
+  if (repayYears !== undefined && (!isFiniteNumber(repayYears) || repayYears <= 0)) {
+    problems.push("repayHorizonYears must be more than zero (leave it out if the user has no plan)");
   }
   if (monthly !== undefined && (!isFiniteNumber(monthly) || monthly < 0)) {
     problems.push("monthlyCapacityUsd must be zero or more");

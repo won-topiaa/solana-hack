@@ -341,6 +341,11 @@ export function createReadWatchPhotos(vision: WatchVision): AgentTool {
         const uploaded = Object.keys(caseFile.photos).join(", ") || "none";
         return { output: { saved: false, problem: `Unknown photo ids. Uploaded photos: ${uploaded}.` }, caseFile };
       }
+      // A photo already read into a watch would make a second, duplicate watch.
+      const readBefore = caseFile.assets.filter((asset): asset is WatchAsset => asset.kind === "watch" && asset.photoIds.some((id) => ids.includes(id)));
+      if (readBefore.length > 0) {
+        return { output: { saved: false, problem: `Already read into ${readBefore.map((watch) => watch.id).join(", ")}. Use record_watch to correct it.` }, caseFile };
+      }
       const unreadable = ids.filter((id) => caseFile.photos[id].dataBase64 === undefined);
       if (unreadable.length > 0) {
         return { output: { saved: false, problem: `Already read and no longer kept: ${unreadable.join(", ")}. Ask the user to upload the photo again.` }, caseFile };

@@ -11,6 +11,8 @@ import type { AgentMessage, CaseFile, PendingApproval, ToolCall, ToolResult } fr
 
 /** Safety stop: a model that keeps calling tools cannot loop forever. */
 export const MAX_MODEL_CALLS_PER_TURN = 6;
+/** Tools run per model reply; more calls in one reply are answered with an error, not run. */
+export const MAX_TOOL_CALLS_PER_REPLY = 4;
 
 const EMPTY_REPLY = "Sorry, I could not produce an answer. Please try again.";
 const AFTER_STEP_REPLY = "The approved step ran and its result is saved in the case, but I could not write an answer. Ask me to continue.";
@@ -140,9 +142,11 @@ async function runToolCalls(
   const results: ToolResult[] = [];
   let pending: PendingApproval | null = null;
 
-  for (const call of calls) {
+  for (const [index, call] of calls.entries()) {
     const tool = deps.tools.find((candidate) => candidate.declaration.name === call.name);
-    if (!tool) {
+    if (index >= MAX_TOOL_CALLS_PER_REPLY) {
+      results.push(resultFor(call, { error: `At most ${MAX_TOOL_CALLS_PER_REPLY} tool calls per reply; ask again for the rest.` }));
+    } else if (!tool) {
       results.push(resultFor(call, { error: `Unknown tool: ${call.name}` }));
     } else if (!tool.stages.includes(file.stage)) {
       results.push(resultFor(call, { error: `${call.name} is not available at this step` }));

@@ -2,7 +2,7 @@ import { generateKeyPairSigner, getBase58Decoder, getBase64Encoder, getTransacti
 import { getAddMemoInstruction } from "@solana-program/memo";
 import { describe, expect, it } from "vitest";
 import type { DevnetRpc } from "./solana";
-import { buildForWallet, changeFor, parseSignedByWallet, verifyWalletProof, walletProofMessage, walletStandIn } from "./userWallet";
+import { buildForWallet, changeFor, changeForAccount, parseSignedByWallet, verifyWalletProof, walletProofMessage, walletStandIn } from "./userWallet";
 
 describe("a transaction built for the user's wallet (offline)", () => {
   it("is paid by the wallet and has no signatures yet", async () => {
@@ -48,13 +48,16 @@ describe("reading a payment back", () => {
       signers: ["w"],
       memos: [],
       tokenChanges: [
-        { mint: "dusd", owner: "w", change: BigInt(-5) },
-        { mint: "dusd", owner: "s", change: BigInt(5) },
-        { mint: "other", owner: "s", change: BigInt(9) },
+        { account: "w-dusd", mint: "dusd", owner: "w", change: BigInt(-5) },
+        { account: "s-dusd", mint: "dusd", owner: "s", change: BigInt(5) },
+        { account: "s-other", mint: "other", owner: "s", change: BigInt(9) },
       ],
     };
     expect(changeFor(parsed, "dusd", "s")).toBe(BigInt(5));
     expect(changeFor(parsed, "dusd", "w")).toBe(BigInt(-5));
     expect(changeFor(parsed, "dusd", "x")).toBe(BigInt(0));
+    // By account address: a payment into another account of the same owner does not count.
+    expect(changeForAccount(parsed, "s-dusd")).toBe(BigInt(5));
+    expect(changeForAccount(parsed, "s-elsewhere")).toBe(BigInt(0));
   });
 });

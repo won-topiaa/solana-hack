@@ -9,8 +9,8 @@ import { createInterface } from "node:readline/promises";
 import { createAgentTools } from "../lib/agent/tools";
 import type { CaseFile } from "../lib/agent/types";
 import { createDevnetChain } from "../lib/chain/devnet";
+import { openAfterKyc } from "../lib/chain/heiLifecycle";
 import {
-  allowlistInvestor,
   createDevnetRpc,
   explorerAddressUrl,
   explorerTxUrl,
@@ -20,6 +20,7 @@ import {
   readTokenAccount,
 } from "../lib/chain/solana";
 import { loadOrCreateWallet } from "../lib/chain/wallets";
+import { simulatedIdentity } from "../lib/integrations/identity";
 import { createDemoPropertySource } from "../lib/integrations/rentcast";
 import { todayInNewYork } from "../lib/params/dates";
 import { getRegistry } from "../lib/params/load";
@@ -63,8 +64,8 @@ async function main() {
   }
   const mint = homeCase.handoff?.onchain?.heiShares?.mint;
   if (!mint) throw new Error("No HEI mint");
-  // KYC allowlist: the approved investor's account is opened; the other stays frozen.
-  const approved = await allowlistInvestor(rpc, issuer, mint as never, investorKyc.address);
+  // KYC: the approved investor's account opens only after its KYC attestation checks out; the other stays frozen.
+  const approved = await openAfterKyc(rpc, issuer, mint as never, investorKyc.address, simulatedIdentity, "The KYC-approved investor");
   const notApproved = await openFrozenAccount(rpc, issuer, mint as never, investorNoKyc.address);
   console.log("\n[KYC allowlist]");
   for (const [label, item] of [["KYC-approved investor", approved], ["investor without KYC", notApproved]] as const) {

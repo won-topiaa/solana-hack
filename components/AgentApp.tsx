@@ -12,7 +12,7 @@ import { CasePanel } from "./CasePanel";
 import { ChatPanel } from "./ChatPanel";
 import type { PhotoForUpload } from "./photoUpload";
 import { Avatar, Badge, ErrorNote, Frame, IconBox, PrimaryButton, SecondaryButton } from "./ui";
-import { signWithWallet } from "./wallet";
+import { connectedTo, signWithWallet } from "./wallet";
 import { WalletBar } from "./WalletBar";
 
 type Persona = { id: string; title: string };
@@ -48,7 +48,7 @@ const WHY_SOLANA = [
   {
     icon: <ShieldCheck size={20} strokeWidth={1.75} />,
     title: "Compliance in the token",
-    text: "Share accounts start frozen. Only wallets with a KYC attestation on Solana, checked on-chain, are opened; the token refuses everyone else.",
+    text: "Share accounts start frozen. The issuer opens one only after reading the wallet's KYC attestation from Solana and checking it; the token refuses everyone else.",
   },
   { icon: <ArrowRightLeft size={20} strokeWidth={1.75} />, title: "Delivery against payment", text: "Each purchase is one transaction: the buyer's dollars and the shares move together, or nothing moves." },
   { icon: <Flame size={20} strokeWidth={1.75} />, title: "Pay and burn together", text: "At settlement each holder is paid its share and its tokens are burned in the same transaction." },
@@ -202,6 +202,7 @@ export function AgentApp({ personas }: { personas: Persona[] }) {
       let signed: unknown;
       if (approved && approval.needsWallet && current.view.wallet) {
         // The server builds the transaction; the user's wallet signs it; the approval carries it back.
+        connectedTo(current.view.wallet.address); // before the server does any work
         setBusy("Preparing the transaction for your wallet..");
         const prepared = await postJson<{ transaction: string }>("/api/case/sign", { token: current.token, approvalId: approval.id });
         setBusy("Sign in your wallet..");
@@ -218,7 +219,7 @@ export function AgentApp({ personas }: { personas: Persona[] }) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 px-6 py-3">
         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <p className="truncate font-mono text-xs text-neutral-500">Case {current.view.caseId}</p>
-          <WalletBar token={current.token} view={current.view} busy={Boolean(busy)} onError={setError} />
+          <WalletBar token={current.token} view={current.view} busy={busy} setBusy={setBusy} onError={setError} />
         </div>
         <button
           type="button"

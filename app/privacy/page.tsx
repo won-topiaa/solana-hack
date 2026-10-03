@@ -16,7 +16,7 @@ const SECTIONS: { title: string; text: string[] }[] = [
   {
     title: "Your case stays in your browser",
     text: [
-      "The server keeps no case. Each answer carries the case back to your browser sealed with AES-256-GCM, and your browser sends it with the next request; the browser can neither read nor change it. Closing the tab or choosing Start over ends the case.",
+      "The server keeps no case. Each answer carries the case back to your browser sealed with AES-256-GCM, and your browser sends it with the next request; the sealed copy cannot be read or changed in the browser. Next to it, this tab keeps a readable copy of your chat and panel so you can see them. Both live in this tab's session storage: closing the tab or choosing Start over removes them from your browser.",
       "Server logs record errors without the contents of a case. The hosting's firewall counts requests per IP address to limit abuse.",
     ],
   },

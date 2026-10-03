@@ -97,6 +97,9 @@ export function kycReference(verificationId: string): string {
   return createHash("sha256").update(verificationId).digest("hex");
 }
 
+/** The check's answer when the wallet has no attestation at all (as opposed to an invalid one). */
+export const NO_KYC_ATTESTATION = "no KYC attestation on-chain";
+
 export type KycCheck = { ok: true; attestation: Address; data: KycAttestationData; expiry: bigint } | { ok: false; attestation: Address; reason: string };
 
 /** Reads the wallet's attestation from the chain and checks everything that makes it ours and valid. */
@@ -104,7 +107,7 @@ export async function checkKycAttestation(rpc: DevnetRpc, issuer: Address, walle
   const { credential, schema } = await kycAddresses(issuer);
   const attestation = await kycAttestationAddress(issuer, wallet);
   const account = await fetchEncodedAccount(rpc, attestation, { commitment: "confirmed" });
-  if (!account.exists) return { ok: false, attestation, reason: "no KYC attestation on-chain" };
+  if (!account.exists) return { ok: false, attestation, reason: NO_KYC_ATTESTATION };
   if (account.programAddress !== SOLANA_ATTESTATION_SERVICE_PROGRAM_ADDRESS || account.data[0] !== ATTESTATION_DISCRIMINATOR) {
     return { ok: false, attestation, reason: "the account is not a Solana Attestation Service attestation" };
   }

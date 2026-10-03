@@ -50,4 +50,9 @@ describe("checkGoal", () => {
     expect(result.ok).toBe(false);
     expect(result.ok ? [] : result.problems.join(" ")).toMatch(problem);
   });
+
+  it("refuses a repayment horizon of zero, which would quietly become the default", () => {
+    const result = checkGoal({ cashNeededUsd: 30_000, neededBy: "2026-10-09", repayHorizonYears: 0 }, TODAY);
+    expect(result.ok).toBe(false);
+  });
 });

@@ -3,7 +3,7 @@
 
 import { heiTerms } from "../calc/hei";
 import { capBindsUntilYears, homeValueAfterYears, settle } from "../calc/settlement";
-import { formatUsd } from "../format";
+import { formatUsd, formatYears, pricesText } from "../format";
 import { pct, type HomeInput, type RealEstateTerms } from "./realEstate";
 
 export type HeiTermSheet = {
@@ -92,10 +92,10 @@ export function describeTermSheet(sheet: HeiTermSheet): string[] {
     `HEI term sheet (home value ${formatUsd(sheet.homeValueUsd)}, ${sheet.valueSource}, ${sheet.valueAsOf}):`,
     `You receive ${formatUsd(sheet.netCashUsd)}. Investors pay ${formatUsd(sheet.grossInvestmentUsd)}, including a ${formatUsd(sheet.feeUsd)} fee.`,
     `${sheet.tokenSupply.toLocaleString("en-US")} tokens at $${sheet.tokenPriceUsd.toFixed(6)} each: ${pct(sheet.shareOfFutureValue)} of the home's future value.`,
-    `Investor return capped at ${pct(sheet.investorReturnCapPerYear)} a year. Term ${sheet.termYears} years; planned settlement after ${sheet.plannedSettlementYears} years.`,
+    `Investor return capped at ${pct(sheet.investorReturnCapPerYear)} a year. Term ${formatYears(sheet.termYears)}; planned settlement after ${formatYears(sheet.plannedSettlementYears)}.`,
     ...sheet.settlementExamples.map(
       (example) =>
-        `If prices ${example.growth === 0 ? "stay flat" : `rise ${pct(example.growth)} a year`}: you pay ${formatUsd(example.payoutUsd)} after ${example.years} years (${pct(example.ownerAnnualCost)} a year).`,
+        `If prices ${pricesText(example.growth)}: you pay ${formatUsd(example.payoutUsd)} after ${formatYears(example.years)} (${pct(example.ownerAnnualCost)} a year).`,
     ),
     `Settlement happens when: ${sheet.settlementTriggers.join(" ")}`,
     `Settlement value: ${sheet.settlementValue}`,

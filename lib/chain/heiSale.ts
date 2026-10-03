@@ -9,17 +9,27 @@ import { getTransferCheckedInstruction } from "@solana-program/token-2022";
 import { purchaseCostMicroUsd } from "../calc/sale";
 import { mintTestDollarsInstruction, openPaymentAccountInstruction, paymentInstruction, type PaymentToken } from "./payment";
 import { accountExists, oldestSignatures, onceMarker, onceMarkerInstruction, sendInstructions, tokenAccount, type DevnetRpc } from "./solana";
+import { changeFor, readParsedTransaction } from "./userWallet";
 
 /** The memo on a closing payment: it names the HEI, for anyone reading the transaction. */
 export function closingMemo(heiMint: Address): string {
   return `ownflow closing v1 mint=${heiMint}`;
 }
 
-/** The earlier closing payment of this HEI, found through its once-only marker. */
-async function earlierClosing(rpc: DevnetRpc, marker: Address): Promise<Signature | null> {
+/**
+ * The earlier closing payment of this HEI, found through its once-only marker, and
+ * checked: it must carry this HEI's closing memo and have paid this homeowner the amount.
+ * Anything else at the marker (someone sent it lamports, or another case's homeowner was
+ * paid) is refused rather than taken as paid.
+ */
+async function earlierClosing(rpc: DevnetRpc, marker: Address, expected: { heiMint: Address; homeowner: Address; token: PaymentToken; amountMicroUsd: bigint }): Promise<Signature | null> {
   if (!(await accountExists(rpc, marker))) return null;
   const [signature] = await oldestSignatures(rpc, marker, 1);
   if (!signature) throw new Error(`The closing marker ${marker} exists but its transaction was not found; try again in a minute`);
+  const parsed = await readParsedTransaction(rpc, signature);
+  if (!parsed.memos.includes(closingMemo(expected.heiMint)) || changeFor(parsed, expected.token.mint, expected.homeowner) !== expected.amountMicroUsd) {
+    throw new Error(`This HEI's closing marker belongs to transaction ${signature}, which did not pay this homeowner the closing amount; nothing more was paid`);
+  }
   return signature;
 }
 
@@ -38,7 +48,8 @@ export async function payAtClosing(
   heiMint: Address,
 ): Promise<{ signature: Signature; alreadyPaid: boolean }> {
   const marker = await onceMarker(issuer, closingMemo(heiMint));
-  const earlier = await earlierClosing(rpc, marker.address);
+  const expected = { heiMint, homeowner, token, amountMicroUsd };
+  const earlier = await earlierClosing(rpc, marker.address, expected);
   if (earlier) return { signature: earlier, alreadyPaid: true };
   try {
     const signature = await sendInstructions(rpc, issuer, [
@@ -52,7 +63,7 @@ export async function payAtClosing(
     return { signature, alreadyPaid: false };
   } catch (error) {
     // Another run may have paid at the same moment: then its payment is the closing.
-    const paid = await earlierClosing(rpc, marker.address).catch(() => null);
+    const paid = await earlierClosing(rpc, marker.address, expected).catch(() => null);
     if (paid) return { signature: paid, alreadyPaid: true };
     throw error;
   }

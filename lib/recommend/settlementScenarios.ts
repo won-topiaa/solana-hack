@@ -15,11 +15,12 @@ export type SettlementScenario = {
   note: string; // where the growth comes from, with its date
   years: number;
   growth: number; // yearly home price growth
+  paramKey: string; // the registry value the growth comes from (its freshness is checked before settling)
 };
 
 const SCENARIOS = [
-  { id: "buyback-2y", years: 2, key: "home_price_growth_2y", label: "Buyback after 2 years" },
-  { id: "maturity-10y", years: 10, key: "home_price_growth_10y", label: "Maturity after 10 years" },
+  { id: "buyback-2y", years: 2, key: "home_price_growth_2y" },
+  { id: "maturity-10y", years: 10, key: "home_price_growth_10y" },
 ] as const;
 
 function signed(growth: number): string {
@@ -31,9 +32,12 @@ export function settlementScenarios(registry: Registry, termYears: number): Sett
   return SCENARIOS.filter((scenario) => scenario.years <= termYears).map((scenario) => {
     const growth = getNumber(registry, scenario.key);
     const asOf = registry.params[scenario.key].as_of;
+    // Settling at the end of the term is maturity; any earlier settlement is the owner's buyback.
+    const label = `${scenario.years >= termYears ? "Maturity" : "Buyback"} after ${scenario.years} years`;
     return {
       id: scenario.id,
-      label: scenario.label,
+      label,
+      paramKey: scenario.key,
       note: `Home prices move as in the ${scenario.years} years to ${asOf}: ${signed(growth)} a year (FHFA house price index, US)`,
       years: scenario.years,
       growth,

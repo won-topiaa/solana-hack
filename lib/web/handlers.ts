@@ -15,6 +15,7 @@ import { parseSignedByWallet, parseWalletAddress, verifyWalletProof, walletProof
 import { todayInNewYork } from "../params/dates";
 import type { Registry } from "../params/types";
 import { PERSONA_IDS, personaCaseOn } from "../recommend/personas";
+import { checkParamsFresh } from "../params/staleness";
 import { findSettlementScenario } from "../recommend/settlementScenarios";
 import { openCase, sealCase } from "./caseToken";
 import { approvalNeedsWallet, buildView, walletLocked, type CaseView } from "./view";
@@ -158,9 +159,15 @@ export async function prepareApprovalSignature(deps: WebDeps, input: { token: un
 // ---- The user's own wallet --------------------------------------------------
 
 /** Step 1 of connecting a wallet: the message it must sign (it names the case and the address). */
+/** Changing the wallet while an approval waits would make the approved sentence untrue. */
+function walletChangeAllowed(caseFile: CaseFile): void {
+  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  if (caseFile.pendingApproval) throw new BadRequest("Answer the approval request first, then change the wallet");
+}
+
 export function walletChallenge(deps: WebDeps, input: { token: unknown; address: unknown }): CaseReply & { message: string } {
   const caseFile = openToken(deps, input.token);
-  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  walletChangeAllowed(caseFile);
   let wallet: string;
   try {
     wallet = parseWalletAddress(input.address);
@@ -181,7 +188,7 @@ export async function walletConnect(deps: WebDeps, input: { token: unknown; sign
   const caseFile = openToken(deps, input.token);
   const challenge = caseFile.walletChallenge;
   if (!challenge) throw new BadRequest("Ask for the message to sign first");
-  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  walletChangeAllowed(caseFile);
   const now = currentTime(deps);
   if (now.getTime() - Date.parse(challenge.issuedAt) > CHALLENGE_MINUTES * 60_000) throw new BadRequest("The message to sign expired; connect the wallet again");
   if (typeof input.signature !== "string" || !(await verifyWalletProof(parseWalletAddress(challenge.address), challenge.message, input.signature))) {
@@ -194,7 +201,7 @@ export async function walletConnect(deps: WebDeps, input: { token: unknown; sign
 /** Back to the demo wallet (only before anything is on-chain). */
 export function walletDisconnect(deps: WebDeps, input: { token: unknown }): CaseReply {
   const caseFile = openToken(deps, input.token);
-  if (walletLocked(caseFile)) throw new BadRequest("This case already has on-chain records, so its wallet cannot change");
+  walletChangeAllowed(caseFile);
   return reply(deps, { ...caseFile, wallet: undefined, walletChallenge: undefined });
 }
 
@@ -235,6 +242,9 @@ function settlementParts(deps: WebDeps, caseFile: CaseFile, input: { scenario: u
   if (parts.handoff.onchain?.heiSettlement) throw new BadRequest("This HEI is already settled");
   const scenario = findSettlementScenario(deps.registry, parts.deal.termYears, input.scenario);
   if (!scenario) throw new BadRequest("Unknown settlement scenario for this HEI's term");
+  // The home price growth is registry data like any other: stale, it may not set an appraisal.
+  const freshness = checkParamsFresh(deps.registry, [scenario.paramKey], deps.registry.frozenOn ?? todayInNewYork(currentTime(deps)));
+  if (!freshness.ok) throw new BadRequest(`The home price index value is out of date (${freshness.stale.map((item) => item.reason).join("; ")}); refresh the registry first`);
   return { ...parts, sale, scenario, years: scenario.years, growth: scenario.growth };
 }
 
@@ -248,7 +258,13 @@ export async function prepareHeiSettlement(deps: WebDeps, input: { token: unknow
   if (!caseFile.wallet) throw new BadRequest("This case uses the demo wallet: settle without signing");
   const { hei, deal, shares, sale, years, growth } = settlementParts(deps, caseFile, input);
   const payment = await prepareWalletSettlementPayment(hei.rpc, hei.wallets, { heiMint: shares.mint, deal, sale, years, growth, wallet: caseFile.wallet.address });
-  const pending = { years, growth, amountMicroUsd: payment?.amountMicroUsd ?? "0", mintedMicroUsd: payment?.mintedMicroUsd ?? "0", preparedAt: currentTime(deps).toISOString() };
+  const pending = {
+    years,
+    growth,
+    amountMicroUsd: payment?.amountMicroUsd ?? "0",
+    lastValidBlockHeight: payment?.lastValidBlockHeight,
+    preparedAt: currentTime(deps).toISOString(),
+  };
   return { ...reply(deps, withOnchain(caseFile, { heiSettlementPending: pending })), payment };
 }
 
@@ -266,7 +282,7 @@ export async function runHeiSettlement(deps: WebDeps, input: { token: unknown; s
     if (!pending || pending.years !== years || pending.growth !== growth) throw new BadRequest("Prepare the settlement payment for your wallet first");
     const signed = signedFrom(input.signed);
     if (!signed && pending.amountMicroUsd !== "0") throw new BadRequest("Sign the settlement payment in your wallet first");
-    homeowner = { kind: "wallet", wallet: caseFile.wallet.address, signed, mintedMicroUsd: pending.mintedMicroUsd };
+    homeowner = { kind: "wallet", wallet: caseFile.wallet.address, signed, amountMicroUsd: pending.amountMicroUsd, lastValidBlockHeight: pending.lastValidBlockHeight };
   }
   const settled = await runSettlement(hei.rpc, hei.wallets, { heiMint: shares.mint, deal, sale, years, growth, scenario: scenario.note, homeowner }, () =>
     currentTime(deps),

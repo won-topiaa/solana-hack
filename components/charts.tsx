@@ -165,7 +165,14 @@ export function HeiPaybackChart({ chart }: { chart: HeiChart }) {
         {chart.plannedYears <= chart.termYears && (
           <g>
             <line x1={x(chart.plannedYears)} x2={x(chart.plannedYears)} y1={PAD.top} y2={HEIGHT - PAD.bottom} stroke="#a3a3a3" strokeOpacity={0.4} strokeDasharray="3 4" />
-            <text x={x(chart.plannedYears) - 6} y={PAD.top + 10} textAnchor="end" fontSize={11} fill="#a3a3a3">
+            {/* Near the left edge the label goes to the right of the line, so it never covers the axis. */}
+            <text
+              x={x(chart.plannedYears) + (x(chart.plannedYears) < 170 ? 6 : -6)}
+              y={PAD.top + 10}
+              textAnchor={x(chart.plannedYears) < 170 ? "start" : "end"}
+              fontSize={11}
+              fill="#a3a3a3"
+            >
               Planned settlement
             </text>
           </g>
