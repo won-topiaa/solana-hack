@@ -17,7 +17,7 @@ import { issuerDerivedSigner, readSupply, readTokenAccount, sendInstructions, ty
 
 /** A share account with its owner and balance. */
 export type ShareHolding = { account: Address; owner: Address; tokens: bigint };
-export type HolderPayout = ShareHolding & { payoutMicroUsd: bigint };
+type HolderPayout = ShareHolding & { payoutMicroUsd: bigint };
 
 /** Holders in one transaction: each adds a payment and a burn. A test checks a full batch fits. */
 export const HOLDERS_PER_TRANSACTION = 4;
@@ -27,7 +27,7 @@ export const HOLDERS_PER_TRANSACTION = 4;
  * investors). New accounts start frozen, so no other account can hold shares; the
  * settlement still checks this against the on-chain supply before paying anyone.
  */
-export async function readHoldings(rpc: DevnetRpc, register: Address[]): Promise<ShareHolding[]> {
+async function readHoldings(rpc: DevnetRpc, register: Address[]): Promise<ShareHolding[]> {
   const holdings: ShareHolding[] = [];
   for (const account of new Set(register)) {
     const state = await readTokenAccount(rpc, account);
@@ -95,7 +95,7 @@ export async function settlementInstructions(input: {
 }
 
 /** What the settlement will pay: each current holder's share, and their sum (what the homeowner pays). */
-export type SettlementPlan = { payouts: HolderPayout[]; paidMicroUsd: bigint };
+type SettlementPlan = { payouts: HolderPayout[]; paidMicroUsd: bigint };
 
 /**
  * Reads the holders and checks them before anyone pays: the shares must not be burned
@@ -120,7 +120,7 @@ export async function planSettlement(
 }
 
 /** `batches` are the transactions that paid and burned; `signatures` also has the account openings before them. */
-export type SettlementRun = { payouts: HolderPayout[]; paidMicroUsd: bigint; signatures: Signature[]; batches: Signature[] };
+type SettlementRun = { payouts: HolderPayout[]; paidMicroUsd: bigint; signatures: Signature[]; batches: Signature[] };
 
 /**
  * Pays every holder from the settlement account and burns its shares. Refuses before

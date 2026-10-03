@@ -9,7 +9,7 @@
 import demoData from "../../data/demo/properties.json";
 import { daysBetween, todayInNewYork } from "../params/dates";
 
-export const RENTCAST_BASE_URL = "https://api.rentcast.io/v1";
+const RENTCAST_BASE_URL = "https://api.rentcast.io/v1";
 
 /** The fields we use from GET /v1/properties (the response is an array of these). */
 export type RentcastProperty = {
@@ -94,7 +94,7 @@ export function createMemoryStore(): CacheStore {
 }
 
 /** Values older than this are fetched again, so a cached value range never gets too old. */
-export const CACHE_MAX_AGE_DAYS = 30;
+const CACHE_MAX_AGE_DAYS = 30;
 
 /** Remembers lookups by address so the same home is fetched once, not on every run. */
 export function withCache(

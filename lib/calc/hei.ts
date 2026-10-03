@@ -20,7 +20,7 @@ export type HeiInput = {
   maxInvestmentShareOfValue: number; // cap on G / V (hei_max_investment_pct_of_value)
 };
 
-export type HeiTerms = {
+type HeiTerms = {
   grossInvestmentUsd: number; // G: what investors pay in total
   feeUsd: number; // G - C
   unitValueTodayUsd: number; // u = V / 1,000,000

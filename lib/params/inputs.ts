@@ -30,7 +30,7 @@ export function getShareRange(registry: Registry, key: string): ShareRange {
   return { low: value.low, high: value.high };
 }
 
-export function getDayRange(registry: Registry, key: string): { min: number; max: number } {
+function getDayRange(registry: Registry, key: string): { min: number; max: number } {
   const value = entryValue(registry, key) as { min?: unknown; max?: unknown } | null;
   if (!value || !isNumber(value.min) || !isNumber(value.max)) {
     throw new Error(`${key} must be an object with numeric min and max`);
@@ -51,7 +51,7 @@ export function getLtvTable(registry: Registry, key: string): LtvByCategory {
   return table;
 }
 
-export function getNumberList(registry: Registry, key: string): number[] {
+function getNumberList(registry: Registry, key: string): number[] {
   const value = entryValue(registry, key);
   if (!Array.isArray(value) || value.length === 0 || !value.every(isNumber)) {
     throw new Error(`${key} must be a non-empty list of numbers`);
@@ -59,7 +59,7 @@ export function getNumberList(registry: Registry, key: string): number[] {
   return value;
 }
 
-export function getTermYears(registry: Registry, key: string): { default: number; min: number; max: number } {
+function getTermYears(registry: Registry, key: string): { default: number; min: number; max: number } {
   const value = entryValue(registry, key) as { default?: unknown; min?: unknown; max?: unknown } | null;
   if (!value || !isNumber(value.default) || !isNumber(value.min) || !isNumber(value.max)) {
     throw new Error(`${key} must be an object with numeric default, min and max`);

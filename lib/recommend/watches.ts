@@ -25,7 +25,7 @@ export type WatchTerms = {
 
 const KEPT = "You want to keep this watch.";
 
-export function dealerOption(watch: WatchInput, terms: WatchTerms): PathOption {
+function dealerOption(watch: WatchInput, terms: WatchTerms): PathOption {
   const offer = dealerOfferUsd(watch.valueUsd, terms.dealerOffer);
   return {
     id: `w-dealer-${watch.assetId}`,
@@ -47,7 +47,7 @@ export function dealerOption(watch: WatchInput, terms: WatchTerms): PathOption {
   };
 }
 
-export function marketplaceOption(watch: WatchInput, terms: WatchTerms): PathOption {
+function marketplaceOption(watch: WatchInput, terms: WatchTerms): PathOption {
   const proceeds = marketplaceProceedsUsd(watch.valueUsd, terms.marketplaceFee);
   return {
     id: `w-market-${watch.assetId}`,
@@ -65,7 +65,7 @@ export function marketplaceOption(watch: WatchInput, terms: WatchTerms): PathOpt
   };
 }
 
-export function watchLoanOption(watch: WatchInput, category: WatchCategory, terms: WatchTerms): PathOption {
+function watchLoanOption(watch: WatchInput, category: WatchCategory, terms: WatchTerms): PathOption {
   return {
     id: `w-loan-${watch.assetId}`,
     lane: "watch",
@@ -88,7 +88,7 @@ export function watchLoanOption(watch: WatchInput, category: WatchCategory, term
  * The watch's tokenization path (PLAN §6.1): authenticate, vault, issue a 1-of-1 token.
  * It raises no cash by itself, so the rules never pick it, but the user may choose it.
  */
-export function vaultTokenOption(watch: WatchInput): PathOption {
+function vaultTokenOption(watch: WatchInput): PathOption {
   return {
     id: `w-vault-token-${watch.assetId}`,
     lane: "watch",
@@ -121,10 +121,10 @@ export function isSelectable(option: PathOption): boolean {
   return option.suitable || option.id.startsWith("w-vault-token-");
 }
 
-export type WatchTiming = { daysUntilNeeded: number; horizonDays: number; urgentDays: number };
+type WatchTiming = { daysUntilNeeded: number; horizonDays: number; urgentDays: number };
 
 /** Which way to use one watch, by rules W-1 to W-3. null = it cannot be used for this goal. */
-export function chooseWatchPath(
+function chooseWatchPath(
   watch: WatchInput,
   timing: WatchTiming,
   terms: WatchTerms,

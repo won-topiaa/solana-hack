@@ -9,7 +9,7 @@ import {
   requirePositive,
 } from "./guards";
 
-export type SettlementInput = {
+type SettlementInput = {
   grossInvestmentUsd: number; // G
   tokenSupply: number; // N
   netCashUsd: number; // C: what the homeowner received at the start
@@ -18,7 +18,7 @@ export type SettlementInput = {
   homeValueAtSettlementUsd: number; // Vt: sale price or appraisal
 };
 
-export type Settlement = {
+type Settlement = {
   uncappedPayoutUsd: number; // P0: the token holders' share of Vt
   capUsd: number; // G * (1 + cap)^t
   payoutUsd: number; // P: what the homeowner actually pays
@@ -28,7 +28,7 @@ export type Settlement = {
 };
 
 /** Constant yearly rate that turns `startUsd` into `endUsd` over `years`. */
-export function annualizedRate(startUsd: number, endUsd: number, years: number): number {
+function annualizedRate(startUsd: number, endUsd: number, years: number): number {
   return (endUsd / startUsd) ** (1 / years) - 1;
 }
 

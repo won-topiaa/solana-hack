@@ -78,15 +78,6 @@ export function DevnetTag() {
   );
 }
 
-export function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-neutral-200 underline decoration-neutral-600 underline-offset-4 hover:text-white hover:decoration-neutral-300">
-      {children}
-      <ExternalIcon size={13} className="text-neutral-500" />
-    </a>
-  );
-}
-
 /** A long hash: shortened on screen, whole in the tooltip. */
 export function Hash({ value }: { value: string }) {
   return (

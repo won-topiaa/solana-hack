@@ -5,7 +5,7 @@
 import { daysBetween } from "./dates";
 import type { ParamEntry, Registry } from "./types";
 
-export type Freshness = {
+type Freshness = {
   stale: boolean;
   basis: "as_of" | "checked_at" | null; // which date the age counts from
   ageDays: number | null;
@@ -31,9 +31,9 @@ export function freshnessOf(entry: ParamEntry, today: string): Freshness {
   return { stale, basis, ageDays, reason };
 }
 
-export type StaleParam = { key: string; reason: string };
+type StaleParam = { key: string; reason: string };
 
-export type FreshnessCheck =
+type FreshnessCheck =
   | { ok: true; registryVersion: string }
   | { ok: false; registryVersion: string; stale: StaleParam[] };
 

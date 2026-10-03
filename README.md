@@ -1,5 +1,7 @@
 # Ownflow
 
+[![CI](https://github.com/won-topiaa/solana-hack/actions/workflows/ci.yml/badge.svg)](https://github.com/won-topiaa/solana-hack/actions/workflows/ci.yml)
+
 **Cash flow from what you own.**
 
 Ownflow is a neutral AI agent for people in the United States who need cash. You say how much you
@@ -9,7 +11,7 @@ path by fixed, published rules. Only after your explicit approval does it record
 receipt and issue tokens on Solana.
 
 - **Live demo (Solana devnet):** https://solana-hack.vercel.app
-- **Source:** this repository (MIT license)
+- **Source:** this repository (MIT license); how the code fits together: [ARCHITECTURE.md](ARCHITECTURE.md)
 - **Submission materials:** [product description](docs/submission/description.md),
   [go-to-market, demand validation and distribution](docs/submission/go-to-market.md) (with sources),
   [logo](docs/submission/ownflow-logo.png)
@@ -260,10 +262,13 @@ Next.js route handlers (Vercel functions)
    └─ lib/chain      Solana devnet with @solana/kit + Token-2022 (receipt, mints, sale, settlement)
 ```
 
+[ARCHITECTURE.md](ARCHITECTURE.md) has the request flow, the agent loop, the on-chain layer, the
+invariants with the tests that hold them, and the trust boundaries.
+
 | Folder | What is there |
 |---|---|
 | `app/`, `components/` | Pages and UI (agent page, partner page), API routes |
-| `lib/agent/` | Orchestrator, tools, prompts, Gemini client, services from the environment |
+| `lib/agent/` | Orchestrator, tools (one file per step in `tools/`), prompts, Gemini client, services from the environment |
 | `lib/calc/` | Money math and its tests |
 | `lib/recommend/` | Comparison, rules, documents, demo personas |
 | `lib/chain/` | Solana: mints, receipt, KYC, sale, settlement, test dollar, wallets |
@@ -300,7 +305,8 @@ when a value it uses is out of date. To run with the values as of the submission
 | `npm run chain:hei` | The whole HEI on devnet: issuance, KYC, closing, sale, settlement; `-- --years 10 --growth 0.03` for maturity |
 | `npm run params:check` | How fresh each registry value is today |
 | `npm run params:refresh` | Refresh market values from FRED (needs `FRED_API_KEY`) |
-| `npm run lint`, `npm run build` | ESLint; production build with the type check |
+| `npm run check` | ESLint, the TypeScript check and the unit tests (CI runs this and the build) |
+| `npm run lint`, `npm run typecheck`, `npm run build` | Each check alone; production build |
 
 Settings (see `.env.example`): `GEMINI_API_KEY` (required), `GEMINI_MODEL`, `CASE_SECRET` (required
 for the web app), `RENTCAST_API_KEY` or `PROPERTY_DATA_SOURCE=demo`, `PLAID_CLIENT_ID` + `PLAID_SECRET`

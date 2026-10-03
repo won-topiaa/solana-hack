@@ -30,16 +30,16 @@ import {
 } from "sas-lib";
 import { sendInstructions, type DevnetRpc } from "./solana";
 
-export const KYC_CREDENTIAL_NAME = "ownflow-kyc-demo";
-export const KYC_SCHEMA_NAME = "investor-kyc";
+const KYC_CREDENTIAL_NAME = "ownflow-kyc-demo";
+const KYC_SCHEMA_NAME = "investor-kyc";
 const SCHEMA_VERSION = 1; // SAS creates every schema at version 1
 /** The first byte of an Attestation account (Credential is 0, Schema is 1). */
 const ATTESTATION_DISCRIMINATOR = 2;
 /** How long a KYC attestation is valid. */
-export const KYC_VALID_DAYS = 365;
+const KYC_VALID_DAYS = 365;
 
 /** What the attestation says, with no personal data. */
-export type KycAttestationData = {
+type KycAttestationData = {
   provider: string; // e.g. "plaid-identity-verification-sandbox", or "simulated"
   reference: string; // SHA-256 of the verification's id at the provider (cannot be reversed)
   verified_at: bigint; // unix seconds
@@ -51,20 +51,20 @@ const SCHEMA_FIELDS = {
 };
 
 /** Our credential and schema addresses (program-derived from the issuer and the names). */
-export async function kycAddresses(issuer: Address) {
+async function kycAddresses(issuer: Address) {
   const [credential] = await findCredentialPda({ authority: issuer, name: KYC_CREDENTIAL_NAME });
   const [schema] = await findSchemaPda({ credential, name: KYC_SCHEMA_NAME, version: SCHEMA_VERSION });
   return { credential, schema };
 }
 
-export async function kycAttestationAddress(issuer: Address, wallet: Address): Promise<Address> {
+async function kycAttestationAddress(issuer: Address, wallet: Address): Promise<Address> {
   const { credential, schema } = await kycAddresses(issuer);
   const [attestation] = await findAttestationPda({ credential, schema, nonce: wallet });
   return attestation;
 }
 
 /** Creates the credential (the issuer as its only signer) and the schema, if they do not exist yet. */
-export async function ensureKycSchema(rpc: DevnetRpc, issuer: KeyPairSigner): Promise<Signature[]> {
+async function ensureKycSchema(rpc: DevnetRpc, issuer: KeyPairSigner): Promise<Signature[]> {
   const { credential, schema } = await kycAddresses(issuer.address);
   const sent: Signature[] = [];
   if (!(await fetchMaybeCredential(rpc, credential)).exists) {
@@ -100,7 +100,7 @@ export function kycReference(verificationId: string): string {
 /** The check's answer when the wallet has no attestation at all (as opposed to an invalid one). */
 export const NO_KYC_ATTESTATION = "no KYC attestation on-chain";
 
-export type KycCheck = { ok: true; attestation: Address; data: KycAttestationData; expiry: bigint } | { ok: false; attestation: Address; reason: string };
+type KycCheck = { ok: true; attestation: Address; data: KycAttestationData; expiry: bigint } | { ok: false; attestation: Address; reason: string };
 
 /** Reads the wallet's attestation from the chain and checks everything that makes it ours and valid. */
 export async function checkKycAttestation(rpc: DevnetRpc, issuer: Address, wallet: Address): Promise<KycCheck> {

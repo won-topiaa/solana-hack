@@ -17,7 +17,7 @@ import { settlementScenarios } from "../recommend/settlementScenarios";
 import { comparisonChart, heiChart, progressOf, type ComparisonChart, type HeiChart, type ProgressStep } from "./charts";
 import { isSelectable } from "../recommend/watches";
 
-export const NOT_ADVICE = "This is not investment or financial advice.";
+const NOT_ADVICE = "This is not investment or financial advice.";
 
 export type Link = { label: string; url: string; detail?: string };
 

@@ -9,7 +9,7 @@ import { formatPercent } from "../format";
 import { getNumber } from "../params/inputs";
 import type { Registry } from "../params/types";
 
-export type SettlementScenario = {
+type SettlementScenario = {
   id: string;
   label: string;
   note: string; // where the growth comes from, with its date

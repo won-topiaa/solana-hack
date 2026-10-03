@@ -13,7 +13,7 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
 }
 
-export function sha256Hex(text: string): string {
+function sha256Hex(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 

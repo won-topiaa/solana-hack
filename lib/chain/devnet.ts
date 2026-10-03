@@ -47,7 +47,7 @@ export function watchTokenInfo(input: WatchIssueInput): TokenInfo {
 }
 
 /** Names a token by the receipt it carries out: one receipt and passport, one token. */
-export function issuanceLabel(input: { passportHash: string; recommendationHash: string }): string {
+function issuanceLabel(input: { passportHash: string; recommendationHash: string }): string {
   return `rec=${input.recommendationHash} passport=${input.passportHash}`;
 }
 

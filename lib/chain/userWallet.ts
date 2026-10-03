@@ -85,7 +85,7 @@ export async function landWalletTransaction(rpc: DevnetRpc, signed: SignedByWall
 }
 
 /** The parts of a confirmed transaction we check (from getTransaction, jsonParsed). */
-export type ParsedTransaction = {
+type ParsedTransaction = {
   signers: string[];
   memos: string[];
   /** Change of each token account's balance, with its mint and owner, in base units. */

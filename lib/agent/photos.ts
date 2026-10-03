@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { CaseFile } from "./types";
 
 /** Image types the Gemini API accepts (https://ai.google.dev/gemini-api/docs/image-understanding). */
-export const PHOTO_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"] as const;
+const PHOTO_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"] as const;
 
 /** Keeps a request with several photos well under Gemini's 20 MB inline limit. */
 export const MAX_PHOTO_BYTES = 7 * 1024 * 1024;

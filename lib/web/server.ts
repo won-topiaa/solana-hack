@@ -17,7 +17,7 @@ async function build(): Promise<WebDeps> {
   return { agent: { ...built.agent, channel: "web" }, registry: built.registry, secret, hei: built.hei, chain: built.chain };
 }
 
-export function webDeps(): Promise<WebDeps> {
+function webDeps(): Promise<WebDeps> {
   // A failed start is not kept, so fixing .env.local and retrying works without a restart.
   services ??= build().catch((error: unknown) => {
     services = null;

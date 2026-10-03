@@ -32,7 +32,7 @@ export function frozenNote(frozenOn: string): string {
   return `Values are frozen as of ${frozenOn} for the judging period. Normally a value older than its validity window stops the recommendation until it is updated.`;
 }
 
-export function describeOption(option: PathOption, years: number): string {
+function describeOption(option: PathOption, years: number): string {
   if (option.informational && option.cashNowUsd === 0) {
     return `${option.label}: ${option.risks.join(" ")} (id: ${option.id})`;
   }

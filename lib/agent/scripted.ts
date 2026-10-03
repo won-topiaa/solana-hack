@@ -4,7 +4,7 @@
 
 import type { LlmClient, LlmReply, LlmRequest } from "./llm";
 
-export type ScriptedLlm = LlmClient & { requests: LlmRequest[] };
+type ScriptedLlm = LlmClient & { requests: LlmRequest[] };
 
 export function createScriptedLlm(replies: LlmReply[]): ScriptedLlm {
   const queue = [...replies];

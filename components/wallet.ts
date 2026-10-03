@@ -22,7 +22,7 @@ import { walletWithoutSigner } from "@solana/kit-plugin-wallet";
 export const walletClient = createClient().use(walletWithoutSigner({ chain: "solana:devnet" }));
 
 /** What goes back to the server: the signed transaction, or the signature of one the wallet sent itself. */
-export type SignedByWallet = { transaction: string } | { signature: string };
+type SignedByWallet = { transaction: string } | { signature: string };
 
 export function shortAddress(address: string): string {
   return `${address.slice(0, 4)}…${address.slice(-4)}`;

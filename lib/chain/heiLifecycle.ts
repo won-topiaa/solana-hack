@@ -33,7 +33,7 @@ import {
 import { buildForWallet, changeFor, changeForAccount, landWalletTransaction, readParsedTransaction, walletStandIn, type SignedByWallet, type UnsignedForWallet } from "./userWallet";
 
 /** What the sale and the settlement need from the term sheet. */
-export type HeiDeal = Pick<
+type HeiDeal = Pick<
   HeiTermSheet,
   "homeValueUsd" | "netCashUsd" | "grossInvestmentUsd" | "tokenPriceUsd" | "tokenSupply" | "investorReturnCapPerYear" | "termYears" | "registryVersion"
 >;
@@ -231,7 +231,7 @@ export async function runPrimarySale(
 }
 
 /** The settlement's numbers before anything moves: the simulated appraisal and the capped payout. */
-export function settlementTerms(deal: HeiDeal, years: number, growth: number) {
+function settlementTerms(deal: HeiDeal, years: number, growth: number) {
   if (!(years > 0 && years <= deal.termYears)) throw new RangeError(`Settle after more than 0 and at most ${deal.termYears} years`);
   const homeValueUsd = homeValueAfterYears(deal.homeValueUsd, growth, years);
   const result = settle({
@@ -312,7 +312,7 @@ export async function prepareWalletSettlementPayment(
 }
 
 /** The homeowner's side of the settlement: a payment already signed by the user's wallet, or the demo wallet. */
-export type HomeownerSide =
+type HomeownerSide =
   | { kind: "demo" }
   | { kind: "wallet"; wallet: string; signed?: SignedByWallet; amountMicroUsd: string; lastValidBlockHeight?: string }; // signed: missing when nothing was due
 

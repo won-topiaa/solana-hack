@@ -55,13 +55,13 @@ import {
   tokenMetadataField,
 } from "@solana-program/token-2022";
 
-export const DEVNET_RPC_URL = "https://api.devnet.solana.com";
+const DEVNET_RPC_URL = "https://api.devnet.solana.com";
 
 export const explorerTxUrl = (signature: string) => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
 export const explorerAddressUrl = (address: string) => `https://explorer.solana.com/address/${address}?cluster=devnet`;
 
 /** An RPC answer worth retrying: rate limited (HTTP 429), a busy node (5xx), no connection, or no answer in time. */
-export function isRetriable(error: unknown): boolean {
+function isRetriable(error: unknown): boolean {
   if (isSolanaError(error, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR)) {
     const status = error.context.statusCode;
     return status === 429 || status >= 500;
@@ -70,7 +70,7 @@ export function isRetriable(error: unknown): boolean {
   return error instanceof TypeError; // fetch's network failure
 }
 
-export function isRateLimited(error: unknown): boolean {
+function isRateLimited(error: unknown): boolean {
   return isSolanaError(error, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR) && error.context.statusCode === 429;
 }
 
@@ -212,7 +212,7 @@ export async function requestDevnetSol(rpc: DevnetRpc, to: Address, sol: number)
 }
 
 /** Moves devnet SOL from the issuer to another demo wallet, so it can pay its own fees. */
-export async function sendDevnetSol(rpc: DevnetRpc, from: KeyPairSigner, to: Address, sol: number): Promise<Signature> {
+async function sendDevnetSol(rpc: DevnetRpc, from: KeyPairSigner, to: Address, sol: number): Promise<Signature> {
   return sendInstructions(rpc, from, [
     getTransferSolInstruction({ source: from, destination: to, amount: lamports(BigInt(Math.round(sol * 1e9))) }),
   ]);
@@ -223,7 +223,7 @@ export async function sendDevnetSol(rpc: DevnetRpc, from: KeyPairSigner, to: Add
  * signature over `label` (Ed25519 signatures are deterministic). Nobody else can compute
  * them, so the addresses made from them cannot be guessed and taken first.
  */
-export async function issuerSecret(issuer: KeyPairSigner, label: string): Promise<Uint8Array> {
+async function issuerSecret(issuer: KeyPairSigner, label: string): Promise<Uint8Array> {
   const signature = await signBytes(issuer.keyPair.privateKey, new TextEncoder().encode(label));
   return new Uint8Array(createHash("sha256").update(signature).digest());
 }
@@ -293,9 +293,9 @@ export async function fundDemoWallet(rpc: DevnetRpc, issuer: KeyPairSigner, wall
  * carries a memo, so the wallet's history shows whether it already had one; without
  * that, replaying a request could drain the issuer.
  */
-export const USER_FEE_SOL = 0.002;
+const USER_FEE_SOL = 0.002;
 const USER_FEE_MIN_SOL = 0.0001;
-export const FEE_TOP_UP_MEMO = "ownflow fee top-up v1";
+const FEE_TOP_UP_MEMO = "ownflow fee top-up v1";
 
 export async function ensureFeeSol(rpc: DevnetRpc, issuer: KeyPairSigner, wallet: Address): Promise<Signature | null> {
   if ((await getSolBalance(rpc, wallet)) >= USER_FEE_MIN_SOL) return null;
@@ -406,10 +406,10 @@ function failedDuringIssuance(mint: Address, error: unknown): Error {
   return new Error(`${message}. Token ${mint} may be partly made (${explorerAddressUrl(mint)}); trying again finishes it and never makes a second one`);
 }
 
-export type MintState = { mintAuthority: Address | null; supply: bigint };
+type MintState = { mintAuthority: Address | null; supply: bigint };
 
 /** A Token-2022 mint's mint authority (null once minting is closed) and supply. null when no account exists. */
-export async function readMintState(rpc: DevnetRpc, mint: Address): Promise<MintState | null> {
+async function readMintState(rpc: DevnetRpc, mint: Address): Promise<MintState | null> {
   const { value } = await rpc.getAccountInfo(mint, { encoding: "jsonParsed" }).send();
   if (!value) return null;
   type Parsed = { parsed?: { type?: string; info?: { mintAuthority?: Address | null; supply?: string } } };
@@ -522,7 +522,7 @@ export async function createWatchToken(rpc: DevnetRpc, issuer: KeyPairSigner, ow
   return { ...issued, account: await tokenAccount(owner, issued.mint) };
 }
 
-export type TokenAccountState = { owner: Address; state: string; amount: string };
+type TokenAccountState = { owner: Address; state: string; amount: string };
 
 /** Reads a token account's owner, state ("frozen" or "initialized") and balance. null when it does not exist. */
 export async function readTokenAccount(rpc: DevnetRpc, account: Address): Promise<TokenAccountState | null> {

@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CacheStore, PropertyLookup } from "./rentcast";
 
-export const DEFAULT_CACHE_DIR = ".cache/rentcast";
+const DEFAULT_CACHE_DIR = ".cache/rentcast";
 
 function fileFor(dir: string, key: string): string {
   return join(dir, `${createHash("sha256").update(key).digest("hex")}.json`);

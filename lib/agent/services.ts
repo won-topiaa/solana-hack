@@ -23,7 +23,7 @@ import { createGeminiClient, DEFAULT_GEMINI_MODEL } from "./gemini";
 import type { AgentDeps } from "./orchestrator";
 import { createAgentTools } from "./tools";
 
-export type AgentServices = {
+type AgentServices = {
   agent: AgentDeps;
   registry: Registry;
   chain: ChainService;

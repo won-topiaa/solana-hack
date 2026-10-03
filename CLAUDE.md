@@ -117,7 +117,7 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 ```
 /app                      Next.js App Router: page.tsx (agent: chat + case panel), partner/page.tsx (closing, sale, settlement), icon.svg, api/case (start), api/case/message, api/case/approval, api/case/sign (transaction for the user's wallet), api/case/wallet (connect), api/hei/sale, api/hei/settlement (+ /prepare for the user's wallet) (route handlers, maxDuration 300)
 /components               AgentApp, ChatPanel, CasePanel, PartnerConsole, AppHeader, WalletBar (connect the user's own wallet), charts.tsx (bars, HEI payback curve, ownership donut, progress steps; plain SVG, no library), wallet.ts (Wallet Standard client, signing), ui (Section, SimulatedTag, DevnetTag, Hash), caseStore.ts (sealed token + view in sessionStorage), photoUpload.ts (resize to JPEG before upload)
-/lib/agent                orchestrator.ts, tools.ts, prompts.ts (English), goal.ts, photos.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), services.ts (real services from env, shared by CLI and web), types.ts
+/lib/agent                orchestrator.ts, tools/ (index.ts assembles them; shared.ts, goal.ts, home.ts, watch.ts, documents.ts, onchain.ts: one file per step), prompts.ts (English), goal.ts, photos.ts, llm.ts (provider interface), gemini.ts, scripted.ts (test model), services.ts (real services from env, shared by CLI and web), types.ts
 /lib/web                  charts.ts (the charts' numbers, from the comparison and the term sheet), caseToken.ts (case sealed with AES-256-GCM under CASE_SECRET; the server keeps no case), view.ts (what the browser shows, formatted by code, no PII), handlers.ts (start, message, approval, HEI sale, settlement), server.ts (server-only: services once per process, JSON answers)
 /lib/calc                 hei.ts, settlement.ts, sale.ts (micro-dollars, purchase cost, settlement split), compare.ts, watch.ts, cross.ts, guards.ts  (+ *.test.ts, test-fixtures.ts)
 /lib/params               load.ts, staleness.ts, inputs.ts, refresh.ts, dates.ts, types.ts  (+ *.test.ts)
@@ -131,6 +131,8 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS, FHFA house price index), check-params.ts, agent-chat.ts, chain-wallets.ts, chain-demo.ts (M7), chain-hei.ts (M8), agentSteps.ts
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
 /docs/submission          description.md, go-to-market.md (sources for every figure), logos (PNG + SVG mark)
+ARCHITECTURE.md          request flow, agent loop, on-chain layer, invariants with their tests, trust boundaries
+/.github/workflows/ci.yml lint, type check, tests and build on every push and pull request
 THIRD_PARTY.md, .env.example
 ```
 
@@ -305,7 +307,9 @@ Run from the repo root (the `rwa-liquidity-agent/` folder). Requires Node.js 22.
 | `npm run chain:wallets` | Create/show the devnet demo wallets and try a devnet airdrop for the fee payers |
 | `npm run chain:demo` | M7 on devnet through the agent tools: persona B receipt + HEI shares + KYC allowlist, persona A receipt + watch token (asks first; `-- --yes`) |
 | `npm run chain:hei` | M8 on devnet for persona B: receipt + shares (agent tools), KYC, closing payment, primary sale (a buyer without KYC is rejected), settlement with pay + burn, then reads balances back. Default: buyback after 2 years, flat prices; `-- --years 10 --growth 0.03` for maturity; `-- --yes` skips the question |
+| `npm run check` | Lint + type check + unit tests in one go (run before every commit; CI runs it and the build) |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
+| `npm run typecheck` | TypeScript check (`tsc --noEmit`; strict, plus no unused locals or parameters, no implicit returns) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |
 

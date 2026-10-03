@@ -46,7 +46,7 @@ export const WATCH_READING_SCHEMA = {
   required: ["maker", "model", "reference", "serial", "caseMaterial", "style", "boxVisible", "papersVisible", "notes"],
 } as const;
 
-export const VISION_PROMPT = `You are reading photos of a wristwatch, its box and its papers for a valuation app.
+const VISION_PROMPT = `You are reading photos of a wristwatch, its box and its papers for a valuation app.
 Transcribe only what you can actually see. Never guess: if a field is not visible or not
 legible, return null. Copy numbers and names exactly as printed.`;
 

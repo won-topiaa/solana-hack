@@ -6,7 +6,7 @@ import type { Goal, Intent } from "./types";
 
 const INTENTS: readonly Intent[] = ["home", "watch", "unsure"];
 
-export type GoalCheck = { ok: true; goal: Goal } | { ok: false; problems: string[] };
+type GoalCheck = { ok: true; goal: Goal } | { ok: false; problems: string[] };
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);

@@ -4,7 +4,7 @@
 import table from "../../data/demo/watch-prices.json";
 import type { WatchCategory } from "../calc/watch";
 
-export type WatchPrice = {
+type WatchPrice = {
   maker: string;
   model: string;
   reference: string;
@@ -15,7 +15,7 @@ export type WatchPrice = {
 };
 
 /** "demo 300" and "DEMO-300" are the same reference. */
-export function normalizeReference(reference: string): string {
+function normalizeReference(reference: string): string {
   return reference.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 

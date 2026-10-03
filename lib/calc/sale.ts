@@ -7,7 +7,7 @@ import { requireNonNegative } from "./guards";
 
 /** The payment token's decimals: 6, the same as USDC, so a later switch keeps every amount. */
 export const PAYMENT_DECIMALS = 6;
-export const MICRO_PER_USD = 1_000_000;
+const MICRO_PER_USD = 1_000_000;
 
 /** Dollars to whole micro-dollars, rounded to the nearest. */
 export function toMicroUsd(usd: number): bigint {

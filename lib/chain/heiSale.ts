@@ -12,7 +12,7 @@ import { accountExists, oldestSignatures, onceMarker, onceMarkerInstruction, sen
 import { changeFor, readParsedTransaction } from "./userWallet";
 
 /** The memo on a closing payment: it names the HEI, for anyone reading the transaction. */
-export function closingMemo(heiMint: Address): string {
+function closingMemo(heiMint: Address): string {
   return `ownflow closing v1 mint=${heiMint}`;
 }
 
@@ -69,7 +69,7 @@ export async function payAtClosing(
   }
 }
 
-export type Purchase = {
+type Purchase = {
   issuer: TransactionSigner; // owns the treasury and receives the money
   buyer: TransactionSigner;
   heiMint: Address;

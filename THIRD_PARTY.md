@@ -24,6 +24,7 @@ Last updated: 2026-10-02 (the user's own wallet; FHFA house price index).
 | @solana/react | 8.4.0 | MIT (an optional peer of @solana/kit-plugin-wallet's React hooks) | https://github.com/anza-xyz/kit |
 | @solana/sysvars | 8.4.0 | MIT | https://github.com/anza-xyz/kit |
 | sas-lib | 2.0.0-beta.1 | MIT, Copyright (c) 2025 Solana Foundation (the repository's LICENSE; the package itself has no license field). Installed with an npm `overrides` entry so it uses our @solana/kit 8.4 instead of its declared peer ^7 (checked: it builds and runs) | https://github.com/solana-foundation/solana-attestation-service |
+| server-only | 0.0.1 | MIT | https://www.npmjs.com/package/server-only (keeps `lib/web/server.ts` out of browser bundles) |
 
 Notable licenses further down the dependency tree (none is shipped as our code): caniuse-lite
 (CC-BY-4.0, browser data used at build time), lightningcss and axe-core (MPL-2.0, build and lint
@@ -36,6 +37,7 @@ app does not use), argparse (Python-2.0, a development tool).
 |---|---|---|---|
 | @tailwindcss/postcss | 4.3.3 | MIT | https://github.com/tailwindlabs/tailwindcss |
 | tailwindcss | 4.3.3 | MIT | https://github.com/tailwindlabs/tailwindcss |
+| postcss | 8.5.28 | MIT | https://github.com/postcss/postcss |
 | typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript |
 | eslint | 9.39.5 | MIT | https://github.com/eslint/eslint |
 | eslint-config-next | 16.3.8 | MIT | https://github.com/vercel/next.js |

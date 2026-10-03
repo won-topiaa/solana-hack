@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { address, generateKeyPairSigner, type Address, type Instruction, type KeyPairSigner, type Signature, type TransactionSigner } from "@solana/kit";
+import { address, generateKeyPairSigner, type Address, type Instruction, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
 import {
   findAssociatedTokenPda,
   getCreateAssociatedTokenIdempotentInstructionAsync,
@@ -17,7 +17,7 @@ import {
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
 import { PAYMENT_DECIMALS } from "../calc/sale";
-import { createMint, readTokenAccount, sendInstructions, type DevnetRpc, type MintOptions, type TokenInfo } from "./solana";
+import { createMint, readTokenAccount, type DevnetRpc, type MintOptions, type TokenInfo } from "./solana";
 import { WALLET_DIR } from "./wallets";
 
 export type PaymentToken = { mint: Address; program: Address; decimals: number; symbol: string };
@@ -87,14 +87,6 @@ export async function paymentInstruction(token: PaymentToken, from: TransactionS
  */
 export async function mintTestDollarsInstruction(token: PaymentToken, issuer: TransactionSigner, owner: Address, amountMicroUsd: bigint): Promise<Instruction> {
   return getMintToInstruction({ mint: token.mint, token: await paymentAccount(owner, token), mintAuthority: issuer, amount: amountMicroUsd }, { programAddress: token.program });
-}
-
-/** Test dollars only: opens the wallet's account if needed and mints into it. */
-export async function mintTestDollars(rpc: DevnetRpc, issuer: KeyPairSigner, token: PaymentToken, owner: Address, amountMicroUsd: bigint): Promise<Signature> {
-  return sendInstructions(rpc, issuer, [
-    await openPaymentAccountInstruction(issuer, owner, token),
-    await mintTestDollarsInstruction(token, issuer, owner, amountMicroUsd),
-  ]);
 }
 
 /** The owner's payment balance in micro-dollars (0 when the account does not exist). */
