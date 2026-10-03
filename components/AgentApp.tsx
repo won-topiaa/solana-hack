@@ -56,6 +56,28 @@ const WHY_SOLANA = [
   { icon: <Scale size={20} strokeWidth={1.75} />, title: "Numbers from code", text: "The AI talks and reads photos. Every figure comes from tested code and dated sources, never from the model." },
 ];
 
+/** A start-screen card. The whole card is the button; the pill at its bottom shows that it can be clicked. */
+function StartCard({ icon, title, text, action, disabled, onClick }: { icon: ReactNode; title: string; text: string; action: string; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="group flex flex-col items-start gap-4 bg-black p-6 text-left transition hover:bg-neutral-950 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-neutral-400 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <IconBox>{icon}</IconBox>
+      <div className="space-y-1.5">
+        <p className="text-[17px] font-medium text-neutral-100">{title}</p>
+        <p className="text-sm leading-relaxed text-neutral-400">{text}</p>
+      </div>
+      <span className="mt-auto inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm font-medium text-neutral-100 transition group-hover:border-white group-hover:bg-white group-hover:text-black">
+        {action}
+        <ChevronRight size={15} strokeWidth={2} className="transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </button>
+  );
+}
+
 function StartScreen({ personas, busy, error, onStart }: { personas: Persona[]; busy: string | null; error: string | null; onStart: (persona?: string) => void }) {
   return (
     <>
@@ -107,40 +129,24 @@ function StartScreen({ personas, busy, error, onStart }: { personas: Persona[]; 
         {/* Lines between cells are the 1px gaps over a grey background. */}
         <div className="grid gap-px border-b border-neutral-800 bg-neutral-800 sm:grid-cols-2 lg:grid-cols-3">
           {personas.map((persona) => (
-            <button
+            <StartCard
               key={persona.id}
-              type="button"
+              icon={PERSONA_ICONS[persona.id] ?? <Sparkles size={20} strokeWidth={1.75} />}
+              title={`Persona ${persona.id}`}
+              text={persona.title}
+              action="Load persona"
               disabled={Boolean(busy)}
               onClick={() => onStart(persona.id)}
-              className="group flex flex-col items-start gap-4 bg-black p-6 text-left transition hover:bg-neutral-950 disabled:opacity-50"
-            >
-              <IconBox>{PERSONA_ICONS[persona.id] ?? <Sparkles size={20} strokeWidth={1.75} />}</IconBox>
-              <div className="space-y-1.5">
-                <p className="text-[17px] font-medium text-neutral-100">Persona {persona.id}</p>
-                <p className="text-sm leading-relaxed text-neutral-400">{persona.title}</p>
-              </div>
-              <span className="mt-auto inline-flex items-center gap-1 text-sm text-neutral-300 group-hover:text-white">
-                Load persona <ChevronRight size={14} />
-              </span>
-            </button>
+            />
           ))}
-          <button
-            type="button"
+          <StartCard
+            icon={<Sparkles size={20} strokeWidth={1.75} />}
+            title="Your own case"
+            text="Start empty and tell the agent your goal. Add a watch photo, or a made-up home address."
+            action="Start a new case"
             disabled={Boolean(busy)}
             onClick={() => onStart()}
-            className="group flex flex-col items-start gap-4 bg-black p-6 text-left transition hover:bg-neutral-950 disabled:opacity-50"
-          >
-            <IconBox>
-              <Sparkles size={20} strokeWidth={1.75} />
-            </IconBox>
-            <div className="space-y-1.5">
-              <p className="text-[17px] font-medium text-neutral-100">Your own case</p>
-              <p className="text-sm leading-relaxed text-neutral-400">Start empty and tell the agent your goal. Add a watch photo, or a made-up home address.</p>
-            </div>
-            <span className="mt-auto inline-flex items-center gap-1 text-sm text-neutral-300 group-hover:text-white">
-              Start a new case <ChevronRight size={14} />
-            </span>
-          </button>
+          />
         </div>
 
         {/* Why Solana */}
