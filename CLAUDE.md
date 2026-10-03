@@ -309,7 +309,7 @@ Run from the repo root (the `rwa-liquidity-agent/` folder). Requires Node.js 22.
 | `npm run chain:hei` | M8 on devnet for persona B: receipt + shares (agent tools), KYC, closing payment, primary sale (a buyer without KYC is rejected), settlement with pay + burn, then reads balances back. Default: buyback after 2 years, flat prices; `-- --years 10 --growth 0.03` for maturity; `-- --yes` skips the question |
 | `npm run check` | Lint + type check + unit tests in one go (run before every commit; CI runs it and the build) |
 | `npm run lint` | ESLint (Next.js 16 `next build` no longer runs the linter) |
-| `npm run typecheck` | TypeScript check (`tsc --noEmit`; strict, plus no unused locals or parameters, no implicit returns) |
+| `npm run typecheck` | TypeScript check (`next typegen` makes the route types, then `tsc --noEmit`; strict, plus no unused locals or parameters, no implicit returns) |
 | `npm run build` | Production build, including the TypeScript type check |
 | `npm start` | Serve the production build |
 
