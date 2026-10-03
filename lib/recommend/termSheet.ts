@@ -4,7 +4,7 @@
 import { heiTerms } from "../calc/hei";
 import { capBindsUntilYears, homeValueAfterYears, settle } from "../calc/settlement";
 import { formatUsd, formatYears, pricesText } from "../format";
-import { pct, type HomeInput, type RealEstateTerms } from "./realEstate";
+import { heiBenchmarkText, pct, type HomeInput, type RealEstateTerms } from "./realEstate";
 
 export type HeiTermSheet = {
   assetId: string;
@@ -24,6 +24,7 @@ export type HeiTermSheet = {
   capBindsUntilYears: { growth: number; years: number }[];
   settlementTriggers: string[];
   settlementValue: string;
+  costBenchmark?: string; // the CFPB benchmark next to this HEI's cap (context only)
   registryVersion: string;
 };
 
@@ -83,6 +84,7 @@ export function buildHeiTermSheet(
     settlementValue:
       "The sale price when the home is sold; otherwise an independent appraisal (simulated in this demo). " +
       "The rule for a sale far below a recent appraisal is still to be decided.",
+    costBenchmark: heiBenchmarkText(terms) ?? undefined,
     registryVersion,
   };
 }

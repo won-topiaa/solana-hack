@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Ownflow's mark: a ring (what you own) with a dot flowing out of it (cash flow). Made for this project. -->
+  <circle cx="10.5" cy="12" r="7.5" stroke="#ffffff" stroke-width="2.5"/>
+  <circle cx="19.5" cy="12" r="2.5" fill="#ffffff"/>
+</svg>

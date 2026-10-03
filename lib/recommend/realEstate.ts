@@ -22,7 +22,19 @@ export type RealEstateTerms = {
   hei: Omit<HeiInput, "homeValueUsd" | "netCashUsd"> & { investorReturnCap: number };
   heiGrowthScenarios: number[];
   heiTermYears: { min: number; max: number };
+  /** For scale, never in a calculation: how fast the amount owed grows early in many HEI contracts (CFPB). */
+  heiCostBenchmark?: { low: number; high: number };
 };
+
+/** The CFPB benchmark next to this HEI's cap, as one sentence (null without the registry value). */
+export function heiBenchmarkText(terms: RealEstateTerms): string | null {
+  const benchmark = terms.heiCostBenchmark;
+  if (!benchmark) return null;
+  return (
+    `For scale: the CFPB found that under many home equity contracts the amount owed grows ${pct(benchmark.low)} to ${pct(benchmark.high)} a year ` +
+    `in the early years (January 2025). This HEI caps it at ${pct(terms.hei.investorReturnCap)} a year.`
+  );
+}
 
 /** 0.0709 -> "7.09%". */
 export const pct = (fraction: number) => formatPercent(fraction * 100);
@@ -117,7 +129,7 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
     assetIds: [home.assetId],
     keepsAsset: true,
     timeToCash: "After appraisal and closing (partner steps are simulated in this demo)",
-    usedParamKeys: HEI_KEYS,
+    usedParamKeys: terms.heiCostBenchmark ? [...HEI_KEYS, "cfpb_hei_early_growth"] : HEI_KEYS,
   };
   if (!hei.eligible) {
     const share = hei.grossInvestmentUsd / home.valueUsd;
@@ -161,6 +173,7 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
     risks: [
       `No monthly payments. At settlement you pay ${pct(hei.shareOfFutureValue)} of the home's value at that time, capped at ${pct(terms.hei.investorReturnCap)} a year on the ${formatUsd(hei.grossInvestmentUsd)} invested.`,
       `Settling early costs the most: if prices stay flat the cap applies for about the first ${capYears.toFixed(1)} years.`,
+      ...(heiBenchmarkText(terms) ? [heiBenchmarkText(terms) as string] : []),
       "If you cannot settle at the end of the term, you may have to sell the home or refinance (CFPB).",
     ],
     suitable: true,

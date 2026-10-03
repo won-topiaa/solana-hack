@@ -54,6 +54,8 @@ export function testRegistry(): Registry {
     comparison_default_horizon_years: entry({ kind: "design", value: 10, valid_days: null }),
     // FHFA index growth (FRED USSTHPI, 2024-Q2 / 2016-Q2 to 2026-Q2), for the settlement demo.
     home_price_growth_2y: entry({ value: 0.034113, unit: "yearly home price growth", as_of: "2026-04-01", checked_at: "2026-10-02", valid_days: 250 }),
+    // CFPB Issue Spotlight (Jan 2025): context next to the HEI's cost, never in a calculation.
+    cfpb_hei_early_growth: entry({ kind: "reference", value: { low: 0.195, high: 0.22 }, unit: "yearly growth", as_of: "2025-01-15", checked_at: "2026-10-03", valid_days: null }),
     home_price_growth_10y: entry({ value: 0.068145, unit: "yearly home price growth", as_of: "2026-04-01", checked_at: "2026-10-02", valid_days: 250 }),
     hei_scenario_growth_rates: entry({ kind: "design", value: [0, 0.03], valid_days: null }),
     hei_term_years: entry({ kind: "design", value: { default: 10, min: 5, max: 30 }, valid_days: null }),

@@ -130,6 +130,7 @@ Approval gates (UI confirmation + wallet signature): minting, any token/USDC tra
 /data/demo                demo personas and watch price table (with source + date); properties.json = made-up homes in RentCast response shape; watch-prices.json = made-up demo price table; personas.json = demo personas A, B, B2, C, D (§8.6)
 /scripts                  refresh-params.ts (FRED: SOFR, Freddie Mac PMMS, FHFA house price index), check-params.ts, agent-chat.ts, chain-wallets.ts, chain-demo.ts (M7), chain-hei.ts (M8), agentSteps.ts
 /docs/internal            PLAN.md, PROGRESS.md (Korean, gitignored)
+/docs/submission          description.md, go-to-market.md (sources for every figure), logos (PNG + SVG mark)
 THIRD_PARTY.md, .env.example
 ```
 

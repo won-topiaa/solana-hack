@@ -186,11 +186,12 @@ const PARAM_LABELS: Record<string, string> = {
   chrono24_private_seller_fee: "Marketplace seller fee",
   watch_loan_ltv: "Watch loan, share of value",
   watch_loan_term_days: "Watch loan term",
+  cfpb_hei_early_growth: "CFPB: early yearly growth of the amount owed in many HEI contracts",
 };
 
 /** A registry value as text: rates and shares as percentages, dollars as dollars. */
 function paramValueText(value: unknown, unit: string): string {
-  const asShare = unit.startsWith("rate") || unit.includes("fraction") || unit.includes("loan-to-value");
+  const asShare = unit.startsWith("rate") || unit.includes("fraction") || unit.includes("loan-to-value") || unit.includes("growth");
   const one = (item: unknown): string => {
     if (typeof item !== "number") return String(item);
     if (asShare) return formatPercent(item * 100);
@@ -206,7 +207,8 @@ function paramValueText(value: unknown, unit: string): string {
 function sourcesOf(keys: string[], registry: Registry): NonNullable<CaseView["comparison"]>["sources"] {
   return [...new Set(keys)]
     .map((key) => ({ key, entry: registry.params[key] }))
-    .filter(({ entry }) => entry && (entry.kind === "market" || entry.kind === "product"))
+    // Market and product values set the numbers; reference values give context (with their source too).
+    .filter(({ entry }) => entry && (entry.kind === "market" || entry.kind === "product" || entry.kind === "reference"))
     .map(({ key, entry }) => ({
       label: PARAM_LABELS[key] ?? key.replaceAll("_", " "),
       value: paramValueText(entry.value, entry.unit),

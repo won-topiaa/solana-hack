@@ -10,6 +10,9 @@ receipt and issue tokens on Solana.
 
 - **Live demo (Solana devnet):** https://solana-hack.vercel.app
 - **Source:** this repository (MIT license)
+- **Submission materials:** [product description](docs/submission/description.md),
+  [go-to-market, demand validation and distribution](docs/submission/go-to-market.md) (with sources),
+  [logo](docs/submission/ownflow-logo.png)
 
 > Not investment or financial advice. This is a demo on Solana **devnet**: tokens and test dollars
 > have no value. Partners (issuer, vault, appraisal, stolen-watch registry) are simulated and marked

@@ -223,6 +223,7 @@ export function HeiPaybackChart({ chart }: { chart: HeiChart }) {
             </li>
           ))}
       </ul>
+      {chart.benchmark && <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{chart.benchmark}</p>}
     </div>
   );
 }

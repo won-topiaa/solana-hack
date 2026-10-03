@@ -8,7 +8,7 @@ import type { CaseFile } from "../agent/types";
 import type { RealEstateAsset, WatchAsset } from "../assets/types";
 import { formatUsd, formatYears } from "../format";
 import { daysBetween } from "../params/dates";
-import { comparisonTerms, heiPricing, watchTerms } from "../params/inputs";
+import { comparisonTerms, getShareRange, heiPricing, watchTerms } from "../params/inputs";
 import { checkParamsFresh } from "../params/staleness";
 import type { Registry } from "../params/types";
 import {
@@ -97,6 +97,8 @@ export function realEstateTerms(registry: Registry): RealEstateTerms {
     },
     heiGrowthScenarios: settings.heiGrowthScenarios,
     heiTermYears: settings.heiTermYears,
+    // Context only (a reference value): shown next to the HEI's cost, never used to compute it.
+    heiCostBenchmark: registry.params.cfpb_hei_early_growth ? getShareRange(registry, "cfpb_hei_early_growth") : undefined,
   };
 }
 

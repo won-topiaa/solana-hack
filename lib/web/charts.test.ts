@@ -81,6 +81,15 @@ describe("the HEI chart (persona B's term sheet)", () => {
     expect(chart.share.ownerText).toBe("You keep 76.59%");
     expect(chart.maxUsd).toBeCloseTo(314_652, 0);
   });
+
+  it("puts the CFPB's finding next to the HEI's 20% a year cap, for scale", () => {
+    expect(chart.benchmark).toBe(
+      "For scale: the CFPB found that under many home equity contracts the amount owed grows 19.5% to 22% a year in the early years (January 2025). This HEI caps it at 20% a year.",
+    );
+    const hei = rec.options.find((option) => option.id === "re-hei");
+    expect(hei?.risks).toContain(chart.benchmark);
+    expect(hei?.usedParamKeys).toContain("cfpb_hei_early_growth"); // listed with its source under the comparison
+  });
 });
 
 describe("the progress steps", () => {

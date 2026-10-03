@@ -120,6 +120,7 @@ export type HeiChart = {
   /** The term sheet's settlement examples, as dots with finished text. */
   examples: { growth: number; years: number; usd: number; text: string }[];
   share: { investors: number; owner: number; investorsText: string; ownerText: string };
+  benchmark: string | null; // the CFPB's finding on early growth in many HEI contracts, for scale
   maxUsd: number;
 };
 
@@ -177,6 +178,7 @@ export function heiChart(sheet: HeiTermSheet): HeiChart {
       investorsText: `Investors: ${formatPercent(investors * 100)} of the home's value at settlement`,
       ownerText: `You keep ${formatPercent((1 - investors) * 100)}`,
     },
+    benchmark: sheet.costBenchmark ?? null,
     // The cap grows fast; the chart's scale follows the payouts, and the cap line runs off the top.
     maxUsd: payoutMax,
   };

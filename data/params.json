@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-10-02.1",
+  "registry_version": "2026-10-03.1",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
@@ -26,6 +26,10 @@
     {
       "version": "2026-10-02.1",
       "note": "refresh-params: sofr 0.039 -> 0.0387 (as_of 2026-09-30 -> 2026-10-01); mortgage_30y_fixed_avg 0.0703 -> 0.0728 (as_of 2026-09-24 -> 2026-10-01); mortgage_15y_fixed_avg 0.0642 -> 0.066 (as_of 2026-09-24 -> 2026-10-01); home_price_growth_2y 0 -> 0.034113 (as_of 2000-01-01 -> 2026-04-01); home_price_growth_10y 0 -> 0.068145 (as_of 2000-01-01 -> 2026-04-01)"
+    },
+    {
+      "version": "2026-10-03.1",
+      "note": "Added cfpb_hei_early_growth (reference, CFPB 2025): shown next to the HEI's cost for scale; never used in a calculation."
     }
   ],
   "rules": {
@@ -322,6 +326,19 @@
       "as_of": "2026-04-01",
       "checked_at": "2026-10-02",
       "valid_days": 250
+    },
+    "cfpb_hei_early_growth": {
+      "value": {
+        "low": 0.195,
+        "high": 0.22
+      },
+      "unit": "yearly growth of the amount owed in the early years of many home equity contracts",
+      "kind": "reference",
+      "source": "CFPB Issue Spotlight, Home Equity Contracts: Market Overview: \"Under many contracts, the settlement amount grows at a rate of 19.5-22% per year in the early years, which is substantially higher than interest rates on most home-secured credit\"",
+      "source_url": "https://www.consumerfinance.gov/data-research/research-reports/issue-spotlight-home-equity-contracts-market-overview/",
+      "as_of": "2025-01-15",
+      "checked_at": "2026-10-03",
+      "valid_days": null
     }
   }
 }
