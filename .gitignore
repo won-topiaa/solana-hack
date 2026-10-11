@@ -49,3 +49,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# private watch price data (sealed copy: data/watch-prices.sealed.json)
+/data/private/

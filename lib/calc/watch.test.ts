@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dealerOfferUsd, marketplaceProceedsUsd, watchLoanUsd } from "./watch";
+import { dealerOfferUsd, marketplaceProceedsUsd, medianPriceUsd, watchLoanUsd } from "./watch";
 import { DEALER_OFFER, MARKETPLACE_FEE, WATCH_A, WATCH_B, WATCH_LTV } from "./test-fixtures";
 
 describe("one watch: A, sport steel, $25,000", () => {
@@ -27,5 +27,18 @@ describe("one watch: B, dress gold, $15,000", () => {
 describe("bad input", () => {
   it("rejects a dealer range whose low end is above its high end", () => {
     expect(() => dealerOfferUsd(25_000, { low: 0.9, high: 0.7 })).toThrow(RangeError);
+  });
+});
+
+describe("medianPriceUsd: a market value from asking and sold prices", () => {
+  it("takes the middle price, so one rare-dial listing does not move it", () => {
+    expect(medianPriceUsd([9_995, 10_468, 25_990])).toBe(10_468);
+    expect(medianPriceUsd([25_990, 9_995, 10_468, 11_000])).toBe(10_734); // the two middle prices, averaged
+  });
+
+  it("rounds to whole dollars and refuses no prices or a price of zero", () => {
+    expect(medianPriceUsd([100, 101])).toBe(101); // 100.5
+    expect(() => medianPriceUsd([])).toThrow(RangeError);
+    expect(() => medianPriceUsd([0, 10])).toThrow(RangeError);
   });
 });

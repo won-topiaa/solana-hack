@@ -226,7 +226,7 @@ Sample records from one run (devnet, demo wallets):
   USDC. Circle's devnet USDC faucet gives 20 USDC per address every 2 hours, far below a $150,000
   sale; the code takes the payment token as data so a real stablecoin could replace it.
 - **Homes in the live demo** are made-up records in RentCast's response format
-  (`data/demo/properties.json`); watch values come from a made-up price table. Plaid (mortgage and
+  (`data/demo/properties.json`); the personas' watch values come from a made-up price table; other references are valued from a private table of US resale asking and sold prices (their median), kept sealed in the repository. Plaid (mortgage and
   identity) runs on its sandbox with test data. Local runs can use RentCast with your own key.
 - **Wallets.** The investors and the issuer are demo wallets held by the server. The user can
   connect their own wallet (Phantom in Testnet Mode); otherwise a demo wallet stands in and your

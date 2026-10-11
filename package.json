@@ -20,7 +20,8 @@
     "agent:chat": "tsx --env-file-if-exists=.env.local scripts/agent-chat.ts",
     "chain:wallets": "tsx --env-file-if-exists=.env.local scripts/chain-wallets.ts",
     "chain:demo": "tsx --env-file-if-exists=.env.local scripts/chain-demo.ts",
-    "chain:hei": "tsx --env-file-if-exists=.env.local scripts/chain-hei.ts"
+    "chain:hei": "tsx --env-file-if-exists=.env.local scripts/chain-hei.ts",
+    "prices:seal": "tsx --env-file-if-exists=.env.local scripts/seal-watch-prices.ts"
   },
   "dependencies": {
     "@google/genai": "^2.25.0",

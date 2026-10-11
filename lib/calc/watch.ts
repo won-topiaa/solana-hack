@@ -42,3 +42,17 @@ export function watchLoanUsd(
   requireShareUpToOne(`ltv for ${category}`, ltv);
   return marketValueUsd * ltv;
 }
+
+/**
+ * A watch's market value from resale prices, asking and sold together (owner, 2026-10-11):
+ * the median, so one unusual listing (a rare dial, a full set) does not move it much.
+ * Whole dollars.
+ */
+export function medianPriceUsd(pricesUsd: number[]): number {
+  if (pricesUsd.length === 0) throw new RangeError("At least one price is needed");
+  for (const price of pricesUsd) requirePositive("price", price);
+  const sorted = [...pricesUsd].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  return Math.round(median);
+}
