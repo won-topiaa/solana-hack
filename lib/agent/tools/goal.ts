@@ -8,7 +8,8 @@ export const recordGoal: AgentTool = {
     name: "record_goal",
     description:
       "Save the user's cash goal. Call it once the user has given at least the amount and the date, " +
-      "and again if they change it. If anything is missing or invalid it returns problems to ask about.",
+      "and again if they change it: then pass what changed; fields you leave out keep their earlier values. " +
+      "If anything is missing or invalid it returns problems to ask about.",
     parameters: {
       type: "object",
       properties: {
@@ -34,7 +35,10 @@ export const recordGoal: AgentTool = {
   stages: ["goal", ...EDITABLE_STAGES],
   requiresApproval: false,
   run(args, { caseFile, today }) {
-    const check = checkGoal(args, today);
+    // An update often names only what changed ("$300,000 instead"); the rest of the goal stays,
+    // so a monthly budget or a repayment plan is never lost by leaving it out (found in a demo run, 2026-10-11).
+    const given = Object.fromEntries(Object.entries(args).filter(([, value]) => value !== null && value !== undefined));
+    const check = checkGoal(caseFile.goal ? { ...caseFile.goal, ...given } : given, today);
     if (!check.ok) return { output: { saved: false, problems: check.problems }, caseFile };
     return {
       output: { saved: true, goal: check.goal },

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkGoal } from "./goal";
+import { personaCase } from "../recommend/personas";
+import { recordGoal } from "./tools/goal";
 
 const TODAY = "2026-10-01";
 
@@ -54,5 +56,15 @@ describe("checkGoal", () => {
   it("refuses a repayment horizon of zero, which would quietly become the default", () => {
     const result = checkGoal({ cashNeededUsd: 30_000, neededBy: "2026-10-09", repayHorizonYears: 0 }, TODAY);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("record_goal on a goal that exists", () => {
+  it("changes only what the update names; the budget and the repayment plan stay", async () => {
+    const caseFile = personaCase("B", new Date("2026-10-01T15:00:00Z"));
+    const before = caseFile.goal;
+    const outcome = await recordGoal.run({ cashNeededUsd: 300_000, neededBy: "2026-12-10", monthlyCapacityUsd: null }, { caseFile, today: TODAY, now: new Date() });
+    expect(outcome.caseFile.goal).toEqual({ ...before, cashNeededUsd: 300_000, neededBy: "2026-12-10" });
+    expect(outcome.caseFile.goal).toMatchObject({ intent: "home", repayHorizonYears: 10, monthlyCapacityUsd: 0 });
   });
 });
