@@ -71,7 +71,8 @@ const EXECUTE_STEP = `Step 5 of the process: on-chain steps on Solana devnet.
 const CHAIN_OPTION = `
 - On-chain steps, in this order, each only if the user wants it (the app asks for approval):
   first record_receipt_onchain; then issue_hei_shares for an HEI, or issue_watch_token for a
-  watch tokenization path.`;
+  watch tokenization path. For a watch loan the receipt is the last step here: the lender's
+  steps (intake, the loan payment, the repayment) run on the Partner page.`;
 
 const STEPS: Record<Stage, string> = {
   goal: GOAL_STEP,

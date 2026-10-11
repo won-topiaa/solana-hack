@@ -13,6 +13,7 @@ import { cashText, costText, frozenNote } from "../recommend/display";
 import { DEMO_PERSONAS } from "../recommend/personas";
 import { watchLabel } from "../recommend/recommend";
 import { describeTermSheet } from "../recommend/termSheet";
+import { describeWatchLoanTermSheet } from "../recommend/watchLoan";
 import { settlementScenarios } from "../recommend/settlementScenarios";
 import { comparisonChart, heiChart, progressOf, type ComparisonChart, type HeiChart, type ProgressStep } from "./charts";
 import { isSelectable } from "../recommend/watches";
@@ -72,6 +73,7 @@ export type CaseView = {
   documents: {
     selected: string;
     recommended: string | null;
+    termSheetTitle: string | null; // "HEI term sheet" or "Watch loan term sheet"
     termSheet: string[];
     heiChart: HeiChart | null; // the payback over time and the ownership split, for an HEI
     passports: { label: string; hash: string }[];
@@ -87,6 +89,15 @@ export type CaseView = {
     scenarios: { id: string; label: string; note: string }[]; // home prices follow the real FHFA index
     sale: { lines: string[]; links: Link[] } | null;
     settlement: { lines: string[]; links: Link[]; correct: boolean } | null;
+  } | null;
+  /** A watch loan after its receipt: the lender's steps (simulated lender, devnet). */
+  watchLoan: {
+    usesWallet: boolean; // the user's own wallet is the borrower: it signs the repayment
+    loans: string[];
+    canOpen: boolean;
+    canRepay: boolean;
+    opened: { lines: string[]; links: Link[] } | null;
+    repaid: { lines: string[]; links: Link[] } | null;
   } | null;
 };
 
@@ -257,7 +268,8 @@ function documentsOf(caseFile: CaseFile): CaseView["documents"] {
   return {
     selected: label(handoff.receipt.selectedOptionId) ?? handoff.receipt.selectedOptionId,
     recommended: label(handoff.receipt.recommendedOptionId),
-    termSheet: handoff.termSheet ? describeTermSheet(handoff.termSheet) : [],
+    termSheetTitle: handoff.termSheet ? "HEI term sheet" : handoff.watchLoans?.length ? "Watch loan term sheet" : null,
+    termSheet: handoff.termSheet ? describeTermSheet(handoff.termSheet) : (handoff.watchLoans ?? []).flatMap(describeWatchLoanTermSheet),
     heiChart: handoff.termSheet ? heiChart(handoff.termSheet) : null,
     passports: handoff.passports.map((passport) => ({ label: assetName(passport.assetId), hash: hashOf(passport) })),
     receipt: { recommendationHash: handoff.receipt.recommendationHash, passportHash: handoff.receipt.passportHash, registryVersion: handoff.receipt.registryVersion },
@@ -353,6 +365,52 @@ function heiOf(caseFile: CaseFile, registry: Registry, kycCheck: { label: string
   };
 }
 
+function watchLoanOf(caseFile: CaseFile): CaseView["watchLoan"] {
+  const handoff = caseFile.handoff;
+  const sheets = handoff?.watchLoans;
+  if (!handoff?.onchain?.receipt || !sheets || sheets.length === 0) return null;
+  const loan = handoff.onchain.watchLoan;
+  const borrower = caseFile.wallet ? "your wallet" : "the borrower (demo wallet)";
+  const amount = loan ? formatMicroUsd(BigInt(loan.amountMicroUsd)) : "";
+  return {
+    usesWallet: Boolean(caseFile.wallet),
+    loans: sheets.map(
+      (sheet) =>
+        `Loan against ${sheet.label}: ${formatUsd(sheet.loanUsd)} (${formatPercent(sheet.loanToValue * 100)} of ${formatUsd(sheet.marketValueUsd)}) for ${sheet.termDays} days.`,
+    ),
+    canOpen: !loan,
+    canRepay: Boolean(loan) && !loan?.repaid,
+    opened: loan
+      ? {
+          lines: [
+            "Intake: the lender received the watch and authenticated it (simulated).",
+            `The lender paid ${borrower} ${amount} for ${loan.termDays} days (simulated lender; its test dollars are minted in the same transaction).`,
+            "The lender holds the watch until the loan is repaid.",
+          ],
+          links: [
+            { label: "Loan payment", url: explorerTxUrl(loan.opened.signature) },
+            { label: "Test dollar (DUSD, no value)", url: explorerAddressUrl(loan.paymentMint) },
+          ],
+        }
+      : null,
+    repaid: loan?.repaid
+      ? {
+          lines: [
+            loan.repaid.by === "user wallet"
+              ? `Your wallet repaid ${amount} into the lender's account for this loan.`
+              : `The borrower (demo wallet) repaid ${amount} into the lender's account for this loan. Simulated: the borrower's own money, minted as test dollars in its payment.`,
+            "Interest and fees: as the lender quotes them; not modeled here, because lenders do not publish them.",
+            "Release: the lender returned the watch (simulated).",
+          ],
+          links: [
+            { label: "Repayment", url: explorerTxUrl(loan.repaid.signature) },
+            { label: "Lender's account for this loan", url: explorerAddressUrl(loan.lenderAccount) },
+          ],
+        }
+      : null,
+  };
+}
+
 /** `kycCheck`: the server's identity check for investors (Plaid's sandbox, or a simulated check). */
 export function buildView(caseFile: CaseFile, registry: Registry, kycCheck = { label: "Simulated identity check", simulated: true }): CaseView {
   const assets = assetsOf(caseFile);
@@ -377,5 +435,6 @@ export function buildView(caseFile: CaseFile, registry: Registry, kycCheck = { l
     documents: documentsOf(caseFile),
     onchain: onchainOf(caseFile),
     hei: heiOf(caseFile, registry, kycCheck),
+    watchLoan: watchLoanOf(caseFile),
   };
 }

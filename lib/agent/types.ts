@@ -4,9 +4,11 @@
 import type { Asset, Photo, PiiItem } from "../assets/types";
 import type { OnchainRecord } from "../chain/adapter";
 import type { SaleRecord, SettlementRecord } from "../chain/heiLifecycle";
+import type { WatchLoanRecord } from "../chain/watchLoan";
 import type { AssetPassport, Receipt } from "../recommend/passport";
 import type { HeiTermSheet } from "../recommend/termSheet";
 import type { Recommendation } from "../recommend/types";
+import type { WatchLoanTermSheet } from "../recommend/watchLoan";
 
 /** Which asset the user came to use: home and watches are separate situations (owner, 2026-10-02). */
 export type Intent = "home" | "watch" | "unsure";
@@ -70,6 +72,7 @@ export type CaseFile = {
   recommendation?: Recommendation; // the latest comparison (step 5)
   handoff?: {
     termSheet?: HeiTermSheet;
+    watchLoans?: WatchLoanTermSheet[]; // one per watch loan in the chosen path
     passports: AssetPassport[];
     receipt: Receipt;
     onchain?: {
@@ -80,6 +83,7 @@ export type CaseFile = {
       heiSettlement?: SettlementRecord;
       /** A settlement payment built for the user's wallet to sign, waiting for the signature. */
       heiSettlementPending?: { years: number; growth: number; amountMicroUsd: string; lastValidBlockHeight?: string; preparedAt: string };
+      watchLoan?: WatchLoanRecord; // the lender's steps after the receipt (simulated lender, devnet)
     };
   }; // steps 6 (off-chain), 7 (on-chain, devnet) and 8 (settlement)
   messages: AgentMessage[];

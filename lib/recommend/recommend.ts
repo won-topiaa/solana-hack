@@ -31,6 +31,14 @@ const RULE_KEYS = {
   watch: ["watch_dealer_urgent_days", "watch_loan_term_days"],
 };
 
+/**
+ * Loan terms are in days and the horizon in years: count it in 30-day months, so
+ * "6 months" (0.5 years) is 180 days, the longest watch loan.
+ */
+export function horizonDays(years: number): number {
+  return Math.round(years * 12) * 30;
+}
+
 export function watchLabel(watch: WatchAsset): string {
   return watch.model ?? watch.reference ?? watch.id;
 }
@@ -181,8 +189,7 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
       category: watch.category,
       kept: kept.has(watch.id),
     }));
-    // Loan terms are in days and the horizon in years: count it in 30-day months, so "6 months" (0.5 years) is 180 days, the longest watch loan.
-    const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: Math.round(years * 12) * 30, urgentDays: settings.dealerUrgentDays };
+    const timing = { daysUntilNeeded: daysBetween(today, goal.neededBy), horizonDays: horizonDays(years), urgentDays: settings.dealerUrgentDays };
     for (const watch of watchInputs) options.push(...allWatchOptions(watch, watchT).map((option) => watchSuitability(option, need, timing.horizonDays, watchT)));
     const result = watchPlan(watchInputs, need, timing, watchT);
     plan = result.plan;

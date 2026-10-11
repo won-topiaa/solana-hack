@@ -69,7 +69,8 @@ receipt and issue tokens on Solana.
    Otherwise the lowest total cost wins, with the HEI counted at its costlier price scenario. You may
    still choose another path, including a tokenization path; the receipt records both what was
    recommended and what you chose.
-5. **Prepare the handoff documents** (off-chain): the HEI term sheet, an *asset passport* per asset
+5. **Prepare the handoff documents** (off-chain): the HEI term sheet or the watch loan term sheet
+   (loan amount, term, what happens to the watch; interest is quoted by the lender), an *asset passport* per asset
    (identifiers as salted hashes, evidence hashes, valuation), and a *recommendation receipt* (the
    hash of the recommendation, the hash of the passports, and the version of the parameter registry
    behind every number).
@@ -77,7 +78,8 @@ receipt and issue tokens on Solana.
    HEI share tokens, or the watch's 1-of-1 token after a (simulated) vault intake.
 7. **Partner steps** (simulated partner): KYC with on-chain attestations, the payment to the homeowner
    at closing, the primary sale to investors, and the settlement that pays every holder and burns
-   their tokens.
+   their tokens. For a watch loan, the simulated lender's steps: intake, the loan payment, and the
+   repayment into the lender's account for that loan, after which the watch is returned.
 
 The case panel shows the comparison as charts (cash now against the goal, the monthly payment
 against the budget, the total cost), the HEI's payback by settlement year with its cap, the
@@ -181,6 +183,7 @@ buyback pays exactly $144,000.069760 and $80,765.799126.
 | KYC | An identity check (Plaid Identity Verification in sandbox, or a simulated check, named as such), then a Solana Attestation Service attestation for the investor's wallet (credential `ownflow-kyc-demo`, schema `investor-kyc`: provider, a hash of the check's id, the time; valid one year). The issuer reads the attestation back from the chain and checks issuer, wallet, schema and expiry by the chain's clock before it thaws the investor's share account; a wallet without one stays frozen | Issuer (demo attestation issuer) |
 | Closing | Test-dollar payment to the homeowner, with a memo naming the HEI and a once-only marker account (created "with seed" from the issuer), so a second closing payment for the same HEI fails on-chain | Issuer |
 | Primary sale | One transaction: the buyer's test dollars are minted (simulated investor money), paid to the issuer, and the shares go to the buyer | Buyer + issuer |
+| Watch loan | (1) The loan payment to the borrower, with a memo naming the receipt, the amount and the days, and a once-only marker. (2) The repayment into the lender's account for that loan (a key the issuer derives per receipt), memo `ownflow watch-loan v1 repaid ...`; your own wallet repays from the test dollars it received and the server checks the landed transaction, the demo wallet's money is minted in its payment. Intake, authentication and the watch's return are simulated; interest is not modeled (lenders do not publish it) | (1) Issuer (simulated lender); (2) your own wallet, or the demo wallet |
 | Settlement | (1) The homeowner pays into the HEI's own settlement account, owned by a servicer key the issuer derives per HEI (memo names the HEI and the amount). Your own wallet pays the test dollars it holds; the demo wallet pays all of it, minted in the same transaction, with a once-only marker. (2) Holders are paid from the settlement account, each in the same transaction as the burn of its shares (up to four per transaction); the simulated rest of a wallet's payout is added in the first of these. Refused once every share is burned; a lost answer is rebuilt from these transactions | (1) Your own wallet, or the demo wallet; (2) issuer (permanent delegate) and the HEI's servicer key |
 
 **Off-chain:** addresses, names, serial numbers, photos, the case file, the comparison and the term
@@ -206,6 +209,9 @@ Sample records from one run (devnet, demo wallets):
 - **The partners.** Ownflow is a connector, not the issuer or the custodian. A licensed partner
   would hold the HEI contract and issue the shares; a vault partner would hold the watch. In the demo
   one server-held "issuer" wallet plays these roles.
+- **The watch lender.** Its intake, authentication and return of the watch are labeled simulated;
+  the loan payment and the repayment are real devnet transactions in test dollars. Lenders do not
+  publish interest or fees, so the repayment is the loan amount and the page says so.
 - **KYC's identity check, the appraisal, the vault intake and the stolen-watch registry.** Each is
   labeled where it appears. The KYC attestation itself is a real Solana Attestation Service record
   checked on-chain; the identity check behind it is Plaid's sandbox with Plaid's test identity when

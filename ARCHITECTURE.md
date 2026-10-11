@@ -25,7 +25,8 @@ lib/web/handlers.ts   open the token → one step → seal the new case → view
         │                 ├── lib/integrations/  RentCast, Plaid, Gemini vision, simulated checks
         │                 └── lib/chain/adapter.ts  ChainService (devnet, or a fake in tests)
         │
-        └── lib/chain/heiLifecycle.ts   partner steps: KYC, closing, primary sale, settlement
+        ├── lib/chain/heiLifecycle.ts   partner steps: KYC, closing, primary sale, settlement
+        └── lib/chain/watchLoan.ts      lender steps: loan payment, repayment (intake and return simulated)
                  └── lib/chain/*         @solana/kit + Token-2022, Memo, System, SAS
 ```
 

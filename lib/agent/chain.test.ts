@@ -119,6 +119,33 @@ describe("watch token on Solana devnet (persona A, tokenization path)", () => {
   });
 });
 
+describe("watch loan (persona A, the recommended plan)", () => {
+  it("prepares a loan term sheet next to the passports, and the receipt is the last step here", async () => {
+    const chain = createFakeChain();
+    const llm = createScriptedLlm([callTool("compare_paths"), say("ok"), callTool("prepare_documents"), say("ok"), callTool("record_receipt_onchain"), say("ok")]);
+    const deps = { llm, tools: toolsWith(chain), now };
+    let file = (await sendUserMessage(personaCase("A", now()), "c", deps)).caseFile;
+    file = (await sendUserMessage(file, "prepare", deps)).caseFile;
+    const sheets = file.handoff?.watchLoans ?? [];
+    expect(sheets.map((sheet) => [sheet.assetId, sheet.loanUsd, sheet.loanToValue])).toEqual([["watch-1", 18_750, 0.75]]);
+    const prepared = JSON.stringify(llm.requests[3].messages.at(-1));
+    expect(prepared).toContain("Watch loan term sheet (Demo Diver 300, market value $25,000");
+    expect(prepared).toContain("the lender's steps (intake, the loan payment, the repayment and the watch's return");
+    file = (await turnApproving(file, "record", deps)).caseFile;
+    expect(chain.calls.map((call) => call.method)).toEqual(["recordReceipt"]);
+    expect(file.handoff?.watchLoans).toHaveLength(1); // kept for the lender's steps
+  });
+
+  it("gives an HEI no loan term sheet", async () => {
+    const llm = createScriptedLlm([callTool("compare_paths"), say("ok"), callTool("prepare_documents"), say("ok")]);
+    const deps = { llm, tools: toolsWith(createFakeChain()), now };
+    let file = (await sendUserMessage(personaCase("B", now()), "c", deps)).caseFile;
+    file = (await sendUserMessage(file, "prepare", deps)).caseFile;
+    expect(file.handoff?.termSheet).toBeDefined();
+    expect(file.handoff?.watchLoans).toBeUndefined();
+  });
+});
+
 describe("a failed devnet call", () => {
   it("becomes a problem the agent can explain, not a crash", async () => {
     const failing: ChainService = {

@@ -91,7 +91,7 @@ function Documents({ documents }: { documents: NonNullable<CaseView["documents"]
       </p>
       {documents.termSheet.length > 0 && (
         <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
-          <h3 className="mb-3 text-sm font-medium text-neutral-100">HEI term sheet</h3>
+          <h3 className="mb-3 text-sm font-medium text-neutral-100">{documents.termSheetTitle}</h3>
           {documents.heiChart && (
             <div className="mb-5 space-y-5">
               <OwnershipDonut share={documents.heiChart.share} />
@@ -181,6 +181,14 @@ export function CasePanel({ view }: { view: CaseView }) {
               <p className="text-sm text-neutral-400">Next for the HEI: the partner&apos;s closing payment, the sale to investors and the settlement.</p>
               <Link href="/partner" className="inline-flex items-center gap-1 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-neutral-200">
                 Partner &amp; investors <ChevronRight size={15} />
+              </Link>
+            </div>
+          )}
+          {view.watchLoan && (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
+              <p className="text-sm text-neutral-400">Next for the watch loan: the lender&apos;s intake, the loan payment, the repayment and the watch&apos;s return.</p>
+              <Link href="/partner" className="inline-flex items-center gap-1 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-neutral-200">
+                Lender <ChevronRight size={15} />
               </Link>
             </div>
           )}

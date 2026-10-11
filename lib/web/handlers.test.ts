@@ -10,7 +10,23 @@ import { createDemoPropertySource } from "../integrations/rentcast";
 import type { WatchVision } from "../integrations/vision";
 import { testRegistry } from "../params/test-fixtures";
 import { openCase, sealCase } from "./caseToken";
-import { BadRequest, CASE_LIMITS, postApproval, postMessage, runHeiSale, runHeiSettlement, startCase, WEB_PHOTO_BYTES, type WebDeps } from "./handlers";
+import type { WatchLoanRecord } from "../chain/watchLoan";
+import {
+  BadRequest,
+  CASE_LIMITS,
+  postApproval,
+  postMessage,
+  prepareWatchLoanRepayment,
+  runHeiSale,
+  runHeiSettlement,
+  runWatchLoanOpen,
+  runWatchLoanRepay,
+  startCase,
+  WEB_PHOTO_BYTES,
+  type WebDeps,
+} from "./handlers";
+import { recommend } from "../recommend/recommend";
+import { buildView } from "./view";
 
 const secret = "web-test-secret-that-is-long-enough-12345";
 const now = () => new Date("2026-10-01T15:00:00Z");
@@ -140,6 +156,82 @@ describe("partner steps", () => {
     const settled = issuedCase({ heiSale: { purchases: [] } as unknown as SaleRecord, heiSettlement: {} as SettlementRecord });
     await expect(runHeiSettlement(deps, { token: settled, scenario: "buyback-2y" })).rejects.toThrow(/already settled/);
     await expect(runHeiSale(deps, { token: sold })).rejects.toThrow(/already ran/);
+  });
+});
+
+describe("a watch loan's lender steps", () => {
+  const sheet = {
+    assetId: "watch-1",
+    label: "Demo Diver 300",
+    marketValueUsd: 25_000,
+    valueSource: "Demo price table (made up)",
+    valueAsOf: "2026-10-02",
+    category: "sport_steel" as const,
+    loanToValue: 0.75,
+    loanUsd: 18_750,
+    termDays: 90,
+    termRangeDays: { min: 30, max: 180 },
+    registryVersion: "test",
+  };
+  const receipt = { network: "devnet" as const, signatures: ["sig"], explorerUrls: ["https://explorer.solana.com/tx/sig?cluster=devnet"], at: "" };
+  const opened: WatchLoanRecord = {
+    paymentMint: "11111111111111111111111111111111",
+    amountMicroUsd: "18750000000",
+    termDays: 90,
+    borrower: "11111111111111111111111111111111",
+    lenderAccount: "11111111111111111111111111111111",
+    opened: { signature: "open-sig", at: "" },
+  };
+
+  function loanCase(onchain: NonNullable<NonNullable<CaseFile["handoff"]>["onchain"]> = {}, withSheets = true): CaseFile {
+    const base = openCase(startCase(depsWith([]), { persona: "A" }).token, secret);
+    return {
+      ...base,
+      handoff: {
+        passports: [],
+        receipt: { recommendedOptionId: "watch-plan", selectedOptionId: "watch-plan", recommendationHash: "a".repeat(64), passportHash: "b".repeat(64), registryVersion: "test", createdAt: now().toISOString() },
+        ...(withSheets ? { watchLoans: [sheet] } : {}),
+        onchain,
+      },
+    };
+  }
+  const token = (file: CaseFile) => sealCase(file, secret);
+
+  it("are refused when devnet is not set up, without a loan, or before the receipt is on-chain", async () => {
+    await expect(runWatchLoanOpen(depsWith([]), { token: token(loanCase({ receipt })) })).rejects.toThrow(/devnet is not set up/);
+    const deps = depsWith([], { hei: {} as never });
+    await expect(runWatchLoanOpen(deps, { token: token(loanCase({ receipt }, false)) })).rejects.toThrow(/no watch loan/);
+    await expect(runWatchLoanOpen(deps, { token: token(loanCase()) })).rejects.toThrow(/Record the receipt on-chain first/);
+  });
+
+  it("pay the loan once and repay it once, in that order, before touching the chain", async () => {
+    const deps = depsWith([], { hei: {} as never });
+    await expect(runWatchLoanRepay(deps, { token: token(loanCase({ receipt })) })).rejects.toThrow(/Run the lender's intake and loan payment first/);
+    await expect(runWatchLoanOpen(deps, { token: token(loanCase({ receipt, watchLoan: opened })) })).rejects.toThrow(/already paid/);
+    const repaid = { ...opened, repaid: { signature: "repay-sig", by: "demo wallet" as const, at: "" } };
+    await expect(runWatchLoanRepay(deps, { token: token(loanCase({ receipt, watchLoan: repaid })) })).rejects.toThrow(/already repaid/);
+    // Only a case with the user's own wallet signs its repayment.
+    await expect(prepareWatchLoanRepayment(deps, { token: token(loanCase({ receipt, watchLoan: opened })) })).rejects.toThrow(/demo wallet/);
+  });
+
+  it("show the loan, then the payment and the repayment, with what is simulated", () => {
+    const before = buildView(loanCase({ receipt }), testRegistry()).watchLoan;
+    expect(before).toMatchObject({ usesWallet: false, canOpen: true, canRepay: false, opened: null, repaid: null });
+    expect(before?.loans).toEqual(["Loan against Demo Diver 300: $18,750 (75% of $25,000) for 90 days."]);
+
+    const done = loanCase({ receipt, watchLoan: { ...opened, repaid: { signature: "repay-sig", by: "demo wallet", at: "" } } });
+    const compared = recommend(done, testRegistry(), "2026-10-01", now());
+    if (compared.status !== "ok") throw new Error(`expected ok, got ${compared.status}`);
+    const after = buildView({ ...done, recommendation: compared.recommendation }, testRegistry());
+    expect(after.watchLoan).toMatchObject({ canOpen: false, canRepay: false });
+    expect(after.watchLoan?.opened?.lines[1]).toBe(
+      "The lender paid the borrower (demo wallet) $18,750.00 for 90 days (simulated lender; its test dollars are minted in the same transaction).",
+    );
+    expect(after.watchLoan?.repaid?.lines).toContain("Release: the lender returned the watch (simulated).");
+    expect(after.watchLoan?.repaid?.links.map((link) => link.label)).toEqual(["Repayment", "Lender's account for this loan"]);
+    expect(after.progress.map((step) => `${step.label}:${step.state}`).slice(-2)).toEqual(["Loan:done", "Repaid:done"]);
+    expect(after.documents?.termSheetTitle).toBe("Watch loan term sheet");
+    expect(after.documents?.termSheet[1]).toBe("You receive $18,750: 75% of the market value (the loan-to-value for steel sport watches).");
   });
 });
 

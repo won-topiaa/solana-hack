@@ -3,7 +3,8 @@
 // The partner and investor page: what happens to an issued HEI after the homeowner's
 // part. The partner (simulated) pays the homeowner at closing and sells the shares to
 // KYC-approved investors; later the HEI settles and each holder is paid and burned.
-// It opens the case the agent page stored in this tab.
+// For a watch loan it is the lender's page instead: intake, the loan payment, the
+// repayment and the watch's return. It opens the case the agent page stored in this tab.
 
 import { ArrowRightLeft, CircleCheck, Flame, Landmark, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
@@ -14,7 +15,8 @@ import { connectedTo, shortAddress, signWithWallet } from "./wallet";
 import { WalletBar } from "./WalletBar";
 
 function linkIcon(label: string): ReactNode {
-  if (label.startsWith("Closing")) return <Landmark size={18} strokeWidth={1.75} />;
+  if (label.startsWith("Closing") || label === "Loan payment") return <Landmark size={18} strokeWidth={1.75} />;
+  if (label === "Repayment") return <ArrowRightLeft size={18} strokeWidth={1.75} />;
   if (label.includes("purchase")) return <ArrowRightLeft size={18} strokeWidth={1.75} />;
   if (label.includes("KYC")) return <ShieldCheck size={18} strokeWidth={1.75} />;
   if (label.startsWith("Settlement") || label.startsWith("Payout")) return <Flame size={18} strokeWidth={1.75} />;
@@ -81,6 +83,147 @@ export function PartnerConsole() {
     });
   }
 
+  /** With the user's own wallet: the server builds the repayment, the wallet signs it, then it lands. */
+  function repayWithWallet() {
+    return attempt("Preparing your repayment on devnet..", async () => {
+      const wallet = current?.view.wallet;
+      if (!current || !wallet) return;
+      connectedTo(wallet.address); // before the server does any work
+      type Prepared = CaseReplyJson & { payment: { transaction: string } | null };
+      const prepared = await postJson<Prepared>("/api/watch/loan/repay/prepare", { token: current.token });
+      storeCase({ token: prepared.token, view: prepared.view });
+      let signed: unknown;
+      if (prepared.payment) {
+        setBusy("Sign the repayment in your wallet..");
+        signed = await signWithWallet(prepared.payment.transaction, wallet.address);
+      }
+      setBusy("Repaying the loan on devnet..");
+      storeCase(await callApi("/api/watch/loan/repay", { token: prepared.token, signed }));
+    });
+  }
+
+  const status = (error || busy) && (
+    <div className="space-y-3 border-b border-neutral-800 px-6 py-4 sm:px-10">
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {busy && (
+        <p className="animate-pulse text-sm text-neutral-400" role="status">
+          {busy}
+        </p>
+      )}
+    </div>
+  );
+
+  const loan = current?.view.watchLoan;
+  if (current && !hei && loan) {
+    return (
+      <Frame className="border-t">
+        <div className="border-b border-neutral-800 px-6 py-14 text-center sm:px-10">
+          <h1 className="text-[40px] font-semibold tracking-[-2px] text-neutral-100">Lender</h1>
+          <p className="mx-auto mt-3 max-w-[640px] text-neutral-400">
+            Ownflow is a connector; a licensed lender would make the loan. Here the app plays the lender on Solana devnet and pays in test dollars (DUSD) with
+            no value. The watch&apos;s intake, authentication and return are simulated. Lenders do not publish interest or fees, so the repayment here is the
+            loan amount.
+          </p>
+        </div>
+        <div className="border-b border-neutral-800 px-6 py-3 sm:px-10">
+          <WalletBar token={current.token} view={current.view} busy={busy} setBusy={setBusy} onError={setError} />
+        </div>
+        {status}
+
+        <Step number={1} title="Intake and loan payment">
+          {loan.opened ? (
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
+              <Lines lines={loan.opened.lines} />
+              <div className="space-y-2.5">
+                {loan.opened.links.map((link) => (
+                  <ChainRecord key={link.url} icon={linkIcon(link.label)} label={link.label} url={link.url} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <Lines lines={loan.loans} />
+              <div className="mt-5 grid gap-px overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-800 sm:grid-cols-3">
+                {[
+                  { icon: <ShieldCheck size={18} strokeWidth={1.75} />, title: "Intake", text: "The lender receives the watch and authenticates it.", tag: <SimulatedTag /> },
+                  {
+                    icon: <Landmark size={18} strokeWidth={1.75} />,
+                    title: "Loan payment",
+                    text: `The lender pays ${loan.usesWallet ? "your wallet" : "the borrower (demo wallet)"} the loan, once, with a memo that names the receipt.`,
+                    tag: <SimulatedTag label="Simulated lender" />,
+                  },
+                  { icon: <Wallet size={18} strokeWidth={1.75} />, title: "Collateral", text: "The lender holds the watch until the loan is repaid, and can sell it if the loan is not repaid in time.", tag: <SimulatedTag /> },
+                ].map((item) => (
+                  <div key={item.title} className="space-y-3 bg-black p-5">
+                    <IconBox>{item.icon}</IconBox>
+                    <p className="font-medium text-neutral-100">{item.title}</p>
+                    <p className="text-sm leading-relaxed text-neutral-400">{item.text}</p>
+                    {item.tag}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6">
+                <PrimaryButton
+                  arrow
+                  disabled={Boolean(busy) || !loan.canOpen}
+                  onClick={() => {
+                    if (window.confirm("Run the lender's intake and pay the loan on Solana devnet? One transaction.")) {
+                      void run("Paying the loan on devnet..", "/api/watch/loan", {});
+                    }
+                  }}
+                >
+                  Run the intake and pay the loan
+                </PrimaryButton>
+              </div>
+            </>
+          )}
+        </Step>
+
+        <Step number={2} title="Repayment and the watch's return">
+          {loan.repaid ? (
+            <>
+              <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3.5 py-1.5 text-sm text-violet-200">
+                <CircleCheck size={16} />
+                Checked on-chain: the loan amount reached the lender&apos;s account for this loan.
+              </p>
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
+                <Lines lines={loan.repaid.lines} />
+                <div className="space-y-2.5">
+                  {loan.repaid.links.map((link) => (
+                    <ChainRecord key={link.url} icon={linkIcon(link.label)} label={link.label} url={link.url} />
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mb-6 max-w-[720px] text-sm leading-relaxed text-neutral-400">
+                {loan.usesWallet && current.view.wallet
+                  ? `Your wallet (${shortAddress(current.view.wallet.address)}) pays the loan back from the test dollars it received; you sign it in your wallet. `
+                  : "The borrower (demo wallet) pays the loan back; its money is simulated, minted as test dollars in its payment. "}
+                The repayment goes into the lender&apos;s account for this loan, and then the lender returns the watch. <SimulatedTag label="Simulated return" />
+              </p>
+              <PrimaryButton
+                arrow
+                disabled={Boolean(busy) || !loan.canRepay}
+                onClick={() => {
+                  if (loan.usesWallet) {
+                    if (window.confirm("Repay the loan on Solana devnet? Your wallet will ask you to sign the payment.")) void repayWithWallet();
+                  } else if (window.confirm("Repay the loan on Solana devnet from the demo wallet?")) {
+                    void run("Repaying the loan on devnet..", "/api/watch/loan/repay", {});
+                  }
+                }}
+              >
+                Repay the loan
+              </PrimaryButton>
+              {!loan.canRepay && <p className="mt-3 text-xs text-neutral-500">Pay the loan first.</p>}
+            </>
+          )}
+        </Step>
+      </Frame>
+    );
+  }
+
   const header = (
     <div className="border-b border-neutral-800 px-6 py-14 text-center sm:px-10">
       <h1 className="text-[40px] font-semibold tracking-[-2px] text-neutral-100">Partner &amp; investors</h1>
@@ -97,13 +240,14 @@ export function PartnerConsole() {
       <Frame className="border-t">
         {header}
         <div className="px-6 py-12 text-center text-neutral-400 sm:px-10">
-          <p>This page continues an HEI after its share tokens are issued.</p>
+          <p>This page continues an HEI after its share tokens are issued, or a watch loan after its receipt is on-chain.</p>
           <p className="mt-2">
             On the{" "}
             <Link href="/" className="text-neutral-100 underline decoration-neutral-600 underline-offset-4">
               agent page
             </Link>
-            , load persona B, compare, prepare the documents, record the receipt and issue the HEI share tokens; then come back here in the same tab.
+            , load persona B, compare, prepare the documents, record the receipt and issue the HEI share tokens (or, for a watch loan, load persona A
+            and record the receipt); then come back here in the same tab.
           </p>
         </div>
       </Frame>
@@ -118,16 +262,7 @@ export function PartnerConsole() {
       <div className="border-b border-neutral-800 px-6 py-3 sm:px-10">
         <WalletBar token={current.token} view={current.view} busy={busy} setBusy={setBusy} onError={setError} />
       </div>
-      {(error || busy) && (
-        <div className="space-y-3 border-b border-neutral-800 px-6 py-4 sm:px-10">
-          {error && <ErrorNote>{error}</ErrorNote>}
-          {busy && (
-            <p className="animate-pulse text-sm text-neutral-400" role="status">
-              {busy}
-            </p>
-          )}
-        </div>
-      )}
+      {status}
 
       <Step number={1} title="Closing and primary sale">
         {hei.sale ? (

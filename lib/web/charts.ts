@@ -209,6 +209,7 @@ export function progressOf(caseFile: CaseFile): ProgressStep[] {
     { label: "Documents", done: Boolean(caseFile.handoff) },
     { label: "On-chain", done: Boolean(onchain?.receipt && (!isHei || onchain.heiShares) && (!caseFile.handoff?.receipt.selectedOptionId.startsWith("w-vault-token-") || onchain.watchToken)) },
     ...(isHei ? [{ label: "Sale", done: Boolean(onchain?.heiSale) }, { label: "Settlement", done: Boolean(onchain?.heiSettlement) }] : []),
+    ...(caseFile.handoff?.watchLoans?.length ? [{ label: "Loan", done: Boolean(onchain?.watchLoan) }, { label: "Repaid", done: Boolean(onchain?.watchLoan?.repaid) }] : []),
   ];
   const current = steps.findIndex((step) => !step.done);
   return steps.map((step, index) => ({ label: step.label, state: step.done ? "done" : index === current ? "current" : "todo" }));

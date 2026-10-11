@@ -5,7 +5,9 @@ import type { Registry } from "../../params/types";
 import { hashOf } from "../../recommend/canonical";
 import { describeRecommendation } from "../../recommend/display";
 import { buildPassport, buildReceipt, type AssetPassport } from "../../recommend/passport";
-import { realEstateTerms, recommend } from "../../recommend/recommend";
+import { horizonDays, realEstateTerms, recommend, watchLabel } from "../../recommend/recommend";
+import { buildWatchLoanTermSheet, describeWatchLoanTermSheet, watchLoanParts, type WatchLoanTermSheet } from "../../recommend/watchLoan";
+import { watchTerms } from "../../params/inputs";
 import { buildHeiTermSheet, describeTermSheet, type HeiTermSheet } from "../../recommend/termSheet";
 import { isSelectable } from "../../recommend/watches";
 import { type AgentTool, EDITABLE_STAGES, assetLabel, inputsChanged } from "./shared";
@@ -114,6 +116,12 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
           recommendation.registryVersion,
         );
       }
+      // A watch loan (alone or in a watch plan) gets its own term sheet.
+      const watchLoans: WatchLoanTermSheet[] = watchLoanParts(chosen).flatMap((part) => {
+        const watch = file.assets.find((asset) => asset.id === part.assetIds[0]);
+        if (watch?.kind !== "watch") return [];
+        return [buildWatchLoanTermSheet(watch, watchLabel(watch), horizonDays(recommendation.inputs.horizonYears), watchTerms(registry), recommendation.registryVersion)];
+      });
       const receipt = buildReceipt(recommendation, passports, now, chosen.id);
       const whose =
         chosen.id === recommendation.chosenId
@@ -125,16 +133,20 @@ export function createPrepareDocuments(registry: Registry): AgentTool {
       const lines = [
         `${whose} Nothing was signed, sent or recorded on-chain.`,
         ...(termSheet ? describeTermSheet(termSheet) : []),
+        ...watchLoans.flatMap(describeWatchLoanTermSheet),
         ...tokenDesign,
         ...passports.map((passport) => `Asset passport for ${assetLabel(file, passport.assetId)}: hash ${hashOf(passport)}.`),
         `Recommendation receipt: recommendation hash ${receipt.recommendationHash}; passports hash ${receipt.passportHash}; parameter registry ${receipt.registryVersion}.`,
         chosen.id === "re-hei" || tokenizesWatch
           ? "Recording the receipt on Solana and issuing tokens are separate steps, and each needs your approval."
           : "Recording the receipt on Solana is a separate step and needs your approval.",
+        ...(watchLoans.length > 0
+          ? ["After the receipt is on-chain, the lender's steps (intake, the loan payment, the repayment and the watch's return; a simulated lender on devnet) run on the Partner page."]
+          : []),
       ];
       return {
         output: { prepared: true, display: lines.join("\n") },
-        caseFile: { ...file, handoff: { termSheet, passports, receipt }, stage: "prepare" },
+        caseFile: { ...file, handoff: { termSheet, ...(watchLoans.length > 0 ? { watchLoans } : {}), passports, receipt }, stage: "prepare" },
       };
     },
   };

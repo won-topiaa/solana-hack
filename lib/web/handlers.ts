@@ -11,6 +11,8 @@ import type { ChainService } from "../chain/adapter";
 import type { IdentityVerifier } from "../integrations/identity";
 import { prepareWalletSettlementPayment, runPrimarySale, runSettlement, type HeiWallets, type WalletPaymentRequest } from "../chain/heiLifecycle";
 import { receiptMemo, type DevnetRpc } from "../chain/solana";
+import { landWalletRepayment, openWatchLoan, prepareWalletRepayment, repayFromDemoWallet } from "../chain/watchLoan";
+import { sumMicroUsd, toMicroUsd } from "../calc/sale";
 import { parseSignedByWallet, parseWalletAddress, verifyWalletProof, walletProofMessage, type SignedByWallet, type UnsignedForWallet } from "../chain/userWallet";
 import { todayInNewYork } from "../params/dates";
 import type { Registry } from "../params/types";
@@ -288,4 +290,72 @@ export async function runHeiSettlement(deps: WebDeps, input: { token: unknown; s
     currentTime(deps),
   );
   return reply(deps, withOnchain(caseFile, { heiSettlement: settled, heiSettlementPending: undefined }));
+}
+
+// ---- A watch loan's lender steps (simulated lender, devnet) ---------------------------
+
+/** What the lender's steps need: devnet, the loan's term sheets and the receipt on-chain. */
+function watchLoanParts(deps: WebDeps, caseFile: CaseFile) {
+  if (!deps.hei) throw new BadRequest("Solana devnet is not set up on this server");
+  const handoff = caseFile.handoff;
+  const sheets = handoff?.watchLoans;
+  if (!handoff || !sheets || sheets.length === 0) throw new BadRequest("This case has no watch loan");
+  if (!handoff.onchain?.receipt) throw new BadRequest("Record the receipt on-chain first");
+  return {
+    hei: deps.hei,
+    recommendationHash: handoff.receipt.recommendationHash,
+    // One payment for every loan in the plan; the term is the longest of them.
+    amountMicroUsd: sumMicroUsd(sheets.map((sheet) => toMicroUsd(sheet.loanUsd))),
+    termDays: Math.max(...sheets.map((sheet) => sheet.termDays)),
+    loan: handoff.onchain.watchLoan,
+  };
+}
+
+/** The loan as it must be to repay it: paid out, and not repaid yet. */
+function repayableLoan(parts: ReturnType<typeof watchLoanParts>) {
+  if (!parts.loan) throw new BadRequest("Run the lender's intake and loan payment first");
+  if (parts.loan.repaid) throw new BadRequest("This loan is already repaid");
+  return parts.loan;
+}
+
+/** Intake (simulated) and the loan payment to the user's wallet or the demo wallet. */
+export async function runWatchLoanOpen(deps: WebDeps, input: { token: unknown }): Promise<CaseReply> {
+  const caseFile = openToken(deps, input.token);
+  const parts = watchLoanParts(deps, caseFile);
+  if (parts.loan) throw new BadRequest("The loan is already paid");
+  const loan = await openWatchLoan(
+    parts.hei.rpc,
+    parts.hei.wallets.issuer,
+    { recommendationHash: parts.recommendationHash, amountMicroUsd: parts.amountMicroUsd, termDays: parts.termDays, borrower: caseFile.wallet?.address ?? parts.hei.wallets.homeowner.address },
+    () => currentTime(deps),
+  );
+  return reply(deps, withOnchain(caseFile, { watchLoan: loan }));
+}
+
+/** With the user's own wallet: builds the repayment for the wallet to sign. `payment` is null when it is already repaid. */
+export async function prepareWatchLoanRepayment(deps: WebDeps, input: { token: unknown }): Promise<CaseReply & { payment: UnsignedForWallet | null }> {
+  const caseFile = openToken(deps, input.token);
+  if (!caseFile.wallet) throw new BadRequest("This case uses the demo wallet: repay without signing");
+  const parts = watchLoanParts(deps, caseFile);
+  const loan = repayableLoan(parts);
+  const payment = await prepareWalletRepayment(parts.hei.rpc, parts.hei.wallets.issuer, loan, parts.recommendationHash);
+  const repayPending = payment ? { lastValidBlockHeight: payment.lastValidBlockHeight, preparedAt: currentTime(deps).toISOString() } : undefined;
+  return { ...reply(deps, withOnchain(caseFile, { watchLoan: { ...loan, repayPending } })), payment };
+}
+
+/** The repayment (the user's signed one, or the demo wallet's), then the watch's release (simulated). */
+export async function runWatchLoanRepay(deps: WebDeps, input: { token: unknown; signed?: unknown }): Promise<CaseReply> {
+  const caseFile = openToken(deps, input.token);
+  const parts = watchLoanParts(deps, caseFile);
+  const loan = repayableLoan(parts);
+  const { rpc, wallets } = parts.hei;
+  let repaid: NonNullable<typeof loan.repaid>;
+  if (caseFile.wallet) {
+    const signature = await landWalletRepayment(rpc, loan, parts.recommendationHash, signedFrom(input.signed), loan.repayPending?.lastValidBlockHeight);
+    repaid = { signature, by: "user wallet", at: currentTime(deps).toISOString() };
+  } else {
+    const signature = await repayFromDemoWallet(rpc, wallets.issuer, wallets.homeowner, loan, parts.recommendationHash);
+    repaid = { signature, by: "demo wallet", at: currentTime(deps).toISOString() };
+  }
+  return reply(deps, withOnchain(caseFile, { watchLoan: { ...loan, repayPending: undefined, repaid } }));
 }
