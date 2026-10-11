@@ -5,9 +5,11 @@ import type { WatchCategory } from "../calc/watch";
 
 export type Lane = "real_estate" | "watch" | "cross";
 
-/** One HEI outcome under an assumed yearly home price growth. */
+/** A yearly home price growth for an HEI scenario; `past` when it is the FHFA index's pace over past years. */
+export type PriceScenario = { growth: number; past?: { years: number; asOf: string } };
+
 /** An HEI settlement scenario; `years` is when it settles (the horizon, at most the longest term). */
-export type Scenario = { growth: number; years: number; payoutUsd: number; totalCostUsd: number; effectiveAnnualCost: number };
+export type Scenario = PriceScenario & { years: number; payoutUsd: number; totalCostUsd: number; effectiveAnnualCost: number };
 
 export type PathOption = {
   id: string;

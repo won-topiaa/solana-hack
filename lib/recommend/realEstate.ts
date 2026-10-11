@@ -8,10 +8,10 @@ import {
   helocInterestOnlyMonthlyUsd,
   interestOnlyTotalUsd,
 } from "../calc/compare";
-import { heiTerms, type HeiInput } from "../calc/hei";
+import { heiTerms, maxHeiNetCashUsd, type HeiInput } from "../calc/hei";
 import { capBindsUntilYears, homeValueAfterYears, settle } from "../calc/settlement";
-import { formatPercent, formatUsd } from "../format";
-import type { PathOption, Scenario } from "./types";
+import { formatPercent, formatUsd, pricesText } from "../format";
+import type { PathOption, PriceScenario, Scenario } from "./types";
 
 export type HomeInput = { assetId: string; valueUsd: number; mortgageBalanceUsd?: number };
 
@@ -21,6 +21,8 @@ export type RealEstateTerms = {
   rateCltvBasis: number;
   hei: Omit<HeiInput, "homeValueUsd" | "netCashUsd"> & { investorReturnCap: number };
   heiGrowthScenarios: number[];
+  /** The FHFA index's yearly growth over the past years: one more scenario (owner, 2026-10-11). */
+  heiPastGrowth: { growth: number; years: number; asOf: string; usedKeys: string[] };
   heiTermYears: { min: number; max: number };
   /** For scale, never in a calculation: how fast the amount owed grows early in many HEI contracts (CFPB). */
   heiCostBenchmark?: { low: number; high: number };
@@ -38,6 +40,25 @@ export function heiBenchmarkText(terms: RealEstateTerms): string | null {
 
 /** 0.0709 -> "7.09%". */
 export const pct = (fraction: number) => formatPercent(fraction * 100);
+
+/** The HEI's price scenarios: the fixed rates, then prices moving as in the past years of the FHFA index. */
+export function heiPriceScenarios(terms: RealEstateTerms): PriceScenario[] {
+  const { growth, years, asOf } = terms.heiPastGrowth;
+  return [...terms.heiGrowthScenarios.map((rate) => ({ growth: rate })), { growth, past: { years, asOf } }];
+}
+
+/** "stay flat", "rise 3% a year", or "move as in the 10 years to 2026-04-01 (+6.81% a year, FHFA house price index)". */
+export function scenarioPricesText(scenario: PriceScenario): string {
+  if (!scenario.past) return pricesText(scenario.growth);
+  const signed = `${scenario.growth >= 0 ? "+" : ""}${pct(scenario.growth)}`;
+  return `move as in the ${scenario.past.years} years to ${scenario.past.asOf} (${signed} a year, FHFA house price index)`;
+}
+
+/** What an HEI on this home can pay at most, said when the user asked for more. */
+function heiMaxText(home: HomeInput, terms: RealEstateTerms): string {
+  const max = maxHeiNetCashUsd({ homeValueUsd: home.valueUsd, ...terms.hei }, home.mortgageBalanceUsd);
+  return max > 0 ? `An HEI on this home can pay at most ${formatUsd(max)}.` : "No HEI fits this home.";
+}
 
 const HEI_KEYS = [
   "hei_investor_discount",
@@ -129,21 +150,24 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
     assetIds: [home.assetId],
     keepsAsset: true,
     timeToCash: "After appraisal and closing (partner steps are simulated in this demo)",
-    usedParamKeys: terms.heiCostBenchmark ? [...HEI_KEYS, "cfpb_hei_early_growth"] : HEI_KEYS,
+    usedParamKeys: [...HEI_KEYS, ...terms.heiPastGrowth.usedKeys, ...(terms.heiCostBenchmark ? ["cfpb_hei_early_growth"] : [])],
   };
   if (!hei.eligible) {
     const share = hei.grossInvestmentUsd / home.valueUsd;
-    const reason = `It would need ${pct(share)} of the home value; the limit is ${pct(terms.hei.maxInvestmentShareOfValue)}.`;
+    const reason = `It would need ${pct(share)} of the home value; the limit is ${pct(terms.hei.maxInvestmentShareOfValue)}. ${heiMaxText(home, terms)}`;
     return { ...base, cashNowUsd: 0, risks: [reason], informational: true, suitable: false, whyNotSuitable: reason };
   }
   // The investors' claim (their share of the home's value, more than they paid because of
   // the discount) comes after the mortgage, so the home must have room for it too.
-  const tooMuch = overEquity(home, hei.shareOfFutureValue * home.valueUsd, "investors' share");
-  if (tooMuch) return { ...base, cashNowUsd: 0, risks: [tooMuch], informational: true, suitable: false, whyNotSuitable: tooMuch };
+  const overMortgage = overEquity(home, hei.shareOfFutureValue * home.valueUsd, "investors' share");
+  if (overMortgage) {
+    const tooMuch = `${overMortgage} ${heiMaxText(home, terms)}`;
+    return { ...base, cashNowUsd: 0, risks: [tooMuch], informational: true, suitable: false, whyNotSuitable: tooMuch };
+  }
 
   // Settlement at the user's planned horizon (early settlement is allowed), never past the longest term.
   const settleYears = Math.min(years, terms.heiTermYears.max);
-  const scenarios: Scenario[] = terms.heiGrowthScenarios.map((growth) => {
+  const scenarios: Scenario[] = heiPriceScenarios(terms).map(({ growth, past }) => {
     const result = settle({
       grossInvestmentUsd: hei.grossInvestmentUsd,
       tokenSupply: hei.tokenSupply,
@@ -152,7 +176,7 @@ export function heiOption(home: HomeInput, amountUsd: number, years: number, ter
       years: settleYears,
       homeValueAtSettlementUsd: homeValueAfterYears(home.valueUsd, growth, settleYears),
     });
-    return { growth, years: settleYears, payoutUsd: result.payoutUsd, totalCostUsd: result.payoutUsd - amountUsd, effectiveAnnualCost: result.ownerAnnualCost };
+    return { growth, ...(past ? { past } : {}), years: settleYears, payoutUsd: result.payoutUsd, totalCostUsd: result.payoutUsd - amountUsd, effectiveAnnualCost: result.ownerAnnualCost };
   });
   // Ranking uses the costliest scenario, so an HEI is never chosen on an optimistic guess.
   const costliest = scenarios.reduce((a, b) => (b.totalCostUsd > a.totalCostUsd ? b : a));

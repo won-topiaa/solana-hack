@@ -4,7 +4,7 @@ import { canonicalJson, hashOf } from "./canonical";
 import { buildPassport, buildReceipt } from "./passport";
 import { personaCase } from "./personas";
 import { realEstateTerms, recommend } from "./recommend";
-import { buildHeiTermSheet } from "./termSheet";
+import { buildHeiTermSheet, describeTermSheet } from "./termSheet";
 
 const now = new Date("2026-10-01T15:00:00Z");
 
@@ -75,8 +75,12 @@ describe("HEI term sheet for persona B", () => {
     expect(sheet.grossInvestmentUsd).toBeCloseTo(156_087.41, 2);
     expect(sheet.tokenSupply).toBe(234_131);
     expect(sheet.termYears).toBe(10);
-    expect(sheet.settlementExamples.map((example) => Math.round(example.payoutUsd))).toEqual([234_131, 314_652]);
-    expect(sheet.capBindsUntilYears.map((item) => Number(item.years.toFixed(2)))).toEqual([2.22, 2.65]);
+    // Flat, +3% a year, and prices as in the past 10 years of the FHFA index (+6.8145% a year).
+    expect(sheet.settlementExamples.map((example) => Math.round(example.payoutUsd))).toEqual([234_131, 314_652, 452_648]);
+    expect(sheet.capBindsUntilYears.map((item) => Number(item.years.toFixed(2)))).toEqual([2.22, 2.65, 3.48]);
+    expect(describeTermSheet(sheet)).toContain(
+      "If prices move as in the 10 years to 2026-04-01 (+6.81% a year, FHFA house price index): you pay $452,648 after 10 years (11.68% a year).",
+    );
   });
 
   it("uses the 5-year minimum term when the plan is shorter", () => {

@@ -58,6 +58,7 @@ export function testRegistry(): Registry {
     cfpb_hei_early_growth: entry({ kind: "reference", value: { low: 0.195, high: 0.22 }, unit: "yearly growth", as_of: "2025-01-15", checked_at: "2026-10-03", valid_days: null }),
     home_price_growth_10y: entry({ value: 0.068145, unit: "yearly home price growth", as_of: "2026-04-01", checked_at: "2026-10-02", valid_days: 250 }),
     hei_scenario_growth_rates: entry({ kind: "design", value: [0, 0.03], valid_days: null }),
+    hei_scenario_history_years: entry({ kind: "design", value: 10, valid_days: null }),
     hei_term_years: entry({ kind: "design", value: { default: 10, min: 5, max: 30 }, valid_days: null }),
     heloc_first_threshold_years: entry({ kind: "design", value: 3, valid_days: null }),
     watch_dealer_urgent_days: entry({ kind: "design", value: 1, valid_days: null }),

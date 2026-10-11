@@ -1,8 +1,8 @@
 // Code-made text for the comparison. The model quotes these lines and never
 // writes a figure itself (CLAUDE.md §3 rule 3).
 
-import { formatUsd, formatYears, pricesText } from "../format";
-import { pct } from "./realEstate";
+import { formatUsd, formatYears } from "../format";
+import { pct, scenarioPricesText } from "./realEstate";
 import type { PathOption, Recommendation } from "./types";
 
 export function cashText(option: PathOption): string {
@@ -15,7 +15,7 @@ export function costText(option: PathOption, years: number): string {
     return option.scenarios
       .map(
         (scenario) =>
-          `if prices ${pricesText(scenario.growth)}, you pay ` +
+          `if prices ${scenarioPricesText(scenario)}, you pay ` +
           `${formatUsd(scenario.payoutUsd)} at settlement in ${formatYears(scenario.years)} (${pct(scenario.effectiveAnnualCost)} a year)`,
       )
       .join("; ");

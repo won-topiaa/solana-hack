@@ -187,6 +187,8 @@ const PARAM_LABELS: Record<string, string> = {
   watch_loan_ltv: "Watch loan, share of value",
   watch_loan_term_days: "Watch loan term",
   cfpb_hei_early_growth: "CFPB: early yearly growth of the amount owed in many HEI contracts",
+  home_price_growth_2y: "Home prices, yearly growth over the past 2 years (FHFA index)",
+  home_price_growth_10y: "Home prices, yearly growth over the past 10 years (FHFA index)",
 };
 
 /** A registry value as text: rates and shares as percentages, dollars as dollars. */

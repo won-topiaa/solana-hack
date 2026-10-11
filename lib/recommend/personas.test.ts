@@ -50,12 +50,26 @@ describe("persona B: home, $150,000 over 10 years, no monthly budget", () => {
     expect(rec.rulesFired).toEqual(["RE-2"]);
   });
 
-  it("shows the HEI cost under both price scenarios (CLAUDE.md §8.5 numbers)", () => {
+  it("shows the HEI cost under both fixed price scenarios (CLAUDE.md §8.5 numbers)", () => {
     const [flat, rising] = option(rec, "re-hei").scenarios ?? [];
     expect(flat.payoutUsd).toBeCloseTo(234_131, 0);
     expect(flat.effectiveAnnualCost * 100).toBeCloseTo(4.6, 1);
     expect(rising.payoutUsd).toBeCloseTo(314_652, 0);
     expect(rising.effectiveAnnualCost * 100).toBeCloseTo(7.7, 1);
+  });
+
+  it("also shows prices moving as in the past 10 years of the FHFA index, and ranks the HEI by it (§8.6)", () => {
+    const hei = option(rec, "re-hei");
+    const past = hei.scenarios?.[2];
+    expect(past).toMatchObject({ growth: 0.068145, past: { years: 10, asOf: "2026-04-01" } });
+    expect(past?.payoutUsd).toBeCloseTo(452_648.45, 2);
+    expect((past?.effectiveAnnualCost ?? 0) * 100).toBeCloseTo(11.68, 2);
+    // The costliest scenario is the one the HEI is ranked by.
+    expect(hei.totalCostUsd).toBeCloseTo(302_648.45, 2);
+    expect(hei.usedParamKeys).toEqual(expect.arrayContaining(["hei_scenario_history_years", "home_price_growth_10y"]));
+    expect(describeRecommendation(rec).join(" ")).toContain(
+      "if prices move as in the 10 years to 2026-04-01 (+6.81% a year, FHFA house price index), you pay $452,648 at settlement in 10 years (11.68% a year)",
+    );
   });
 
   it("rules out both loans because their payments exceed the budget", () => {
@@ -235,6 +249,31 @@ describe("edge cases found in the audit (2026-10-03)", () => {
     const hei = option(rec, "re-hei");
     expect(hei.suitable).toBe(false);
     expect(hei.whyNotSuitable).toContain("The mortgage plus this investors' share would be 103.41% of the home's value");
+    // $200,000 of equity holds a claim of G / (1 - d) at most: G = $133,333, so $128,133 after the 3.9% fee.
+    expect(hei.whyNotSuitable).toContain("An HEI on this home can pay at most $128,133.");
     expect(rec.chosenId).not.toBe("re-hei");
+  });
+
+  it("says how much an HEI can pay when the user asks for more than the cap allows", () => {
+    const rec = recommendWith("B", (file) => ({ ...file, goal: file.goal && { ...file.goal, cashNeededUsd: 300_000 } }));
+    expect(option(rec, "re-hei").whyNotSuitable).toBe(
+      "It would need 31.22% of the home value; the limit is 24.99%. An HEI on this home can pay at most $240,153.",
+    );
+  });
+
+  it("names the costliest HEI scenario when the lowest total cost decides", () => {
+    const rec = recommendWith("B", (file) => ({ ...file, goal: file.goal && { ...file.goal, monthlyCapacityUsd: 5_000 } }));
+    expect(rec.chosenId).toBe("re-home-equity-loan");
+    expect(rec.reasons.join(" ")).toContain(
+      "(the HEI is counted as if prices move as in the 10 years to 2026-04-01 (+6.81% a year, FHFA house price index)).",
+    );
+  });
+
+  it("blocks the recommendation when the FHFA growth behind the HEI scenario is stale", () => {
+    const registry = testRegistry();
+    const stale = { ...registry, params: { ...registry.params, home_price_growth_10y: { ...registry.params.home_price_growth_10y, as_of: "2025-01-01" } } };
+    const result = recommend(personaCase("B", now), stale, TODAY, now);
+    expect(result.status).toBe("needs_fresh_data");
+    if (result.status === "needs_fresh_data") expect(result.stale.map((item) => item.key)).toEqual(["home_price_growth_10y"]);
   });
 });

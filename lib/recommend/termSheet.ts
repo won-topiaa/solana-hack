@@ -3,8 +3,9 @@
 
 import { heiTerms } from "../calc/hei";
 import { capBindsUntilYears, homeValueAfterYears, settle } from "../calc/settlement";
-import { formatUsd, formatYears, pricesText } from "../format";
-import { heiBenchmarkText, pct, type HomeInput, type RealEstateTerms } from "./realEstate";
+import { formatUsd, formatYears } from "../format";
+import { heiBenchmarkText, heiPriceScenarios, pct, scenarioPricesText, type HomeInput, type RealEstateTerms } from "./realEstate";
+import type { PriceScenario } from "./types";
 
 export type HeiTermSheet = {
   assetId: string;
@@ -20,7 +21,7 @@ export type HeiTermSheet = {
   investorReturnCapPerYear: number;
   termYears: number;
   plannedSettlementYears: number;
-  settlementExamples: { growth: number; years: number; payoutUsd: number; ownerAnnualCost: number }[];
+  settlementExamples: (PriceScenario & { years: number; payoutUsd: number; ownerAnnualCost: number })[];
   capBindsUntilYears: { growth: number; years: number }[];
   settlementTriggers: string[];
   settlementValue: string;
@@ -60,7 +61,7 @@ export function buildHeiTermSheet(
     investorReturnCapPerYear: terms.hei.investorReturnCap,
     termYears,
     plannedSettlementYears: settlementYears,
-    settlementExamples: terms.heiGrowthScenarios.map((growth) => {
+    settlementExamples: heiPriceScenarios(terms).map(({ growth, past }) => {
       const result = settle({
         grossInvestmentUsd: hei.grossInvestmentUsd,
         tokenSupply: hei.tokenSupply,
@@ -69,9 +70,9 @@ export function buildHeiTermSheet(
         years: settlementYears,
         homeValueAtSettlementUsd: homeValueAfterYears(home.valueUsd, growth, settlementYears),
       });
-      return { growth, years: settlementYears, payoutUsd: result.payoutUsd, ownerAnnualCost: result.ownerAnnualCost };
+      return { growth, ...(past ? { past } : {}), years: settlementYears, payoutUsd: result.payoutUsd, ownerAnnualCost: result.ownerAnnualCost };
     }),
-    capBindsUntilYears: terms.heiGrowthScenarios.map((growth) => ({
+    capBindsUntilYears: heiPriceScenarios(terms).map(({ growth }) => ({
       growth,
       years: capBindsUntilYears({ ...capInput, annualGrowth: growth }),
     })),
@@ -97,7 +98,7 @@ export function describeTermSheet(sheet: HeiTermSheet): string[] {
     `Investor return capped at ${pct(sheet.investorReturnCapPerYear)} a year. Term ${formatYears(sheet.termYears)}; planned settlement after ${formatYears(sheet.plannedSettlementYears)}.`,
     ...sheet.settlementExamples.map(
       (example) =>
-        `If prices ${pricesText(example.growth)}: you pay ${formatUsd(example.payoutUsd)} after ${formatYears(example.years)} (${pct(example.ownerAnnualCost)} a year).`,
+        `If prices ${scenarioPricesText(example)}: you pay ${formatUsd(example.payoutUsd)} after ${formatYears(example.years)} (${pct(example.ownerAnnualCost)} a year).`,
     ),
     `Settlement happens when: ${sheet.settlementTriggers.join(" ")}`,
     `Settlement value: ${sheet.settlementValue}`,

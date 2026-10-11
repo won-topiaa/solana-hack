@@ -147,3 +147,14 @@ export function comparisonTerms(registry: Registry): WithKeys<{
     ],
   };
 }
+
+/**
+ * An extra HEI price scenario (owner, 2026-10-11): home prices move as they did over the
+ * past `hei_scenario_history_years` years of the FHFA index (registry home_price_growth_<n>y),
+ * because that pace can be well above the fixed +3% a year.
+ */
+export function heiPastGrowth(registry: Registry): WithKeys<{ growth: number; years: number; asOf: string }> {
+  const years = getNumber(registry, "hei_scenario_history_years");
+  const key = `home_price_growth_${years}y`;
+  return { growth: getNumber(registry, key), years, asOf: registry.params[key].as_of, usedKeys: ["hei_scenario_history_years", key] };
+}

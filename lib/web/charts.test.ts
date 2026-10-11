@@ -32,13 +32,15 @@ describe("the comparison chart (persona B)", () => {
     ]);
   });
 
-  it("shows the HEI's cost as the range of its price scenarios (§8.5: 84,131 flat, 164,652 at +3%)", () => {
+  it("shows the HEI's cost as the range of its price scenarios (84,131 flat, 302,648 as in the past 10 years)", () => {
     const costs = panel("Total cost over 10 years");
     const hei = costs?.bars.find((item) => item.id === "re-hei");
     expect(Math.round(hei?.low ?? 0)).toBe(84_131);
-    expect(Math.round(hei?.high ?? 0)).toBe(164_652);
-    expect(hei).toMatchObject({ recommended: true, text: "$84,131 to $164,652" });
-    expect(costs?.note).toBe("HEI: the bar runs from prices that stay flat to prices that rise 3% a year.");
+    expect(Math.round(hei?.high ?? 0)).toBe(302_648);
+    expect(hei).toMatchObject({ recommended: true, text: "$84,131 to $302,648" });
+    expect(costs?.note).toBe(
+      "HEI: the bar runs from prices that stay flat to prices that move as in the 10 years to 2026-04-01 (+6.81% a year, FHFA house price index).",
+    );
   });
 });
 
@@ -73,13 +75,14 @@ describe("the HEI chart (persona B's term sheet)", () => {
     expect(Math.round(at("Prices flat", 3))).toBe(234_131);
     expect(Math.round(at("Prices flat", 10))).toBe(234_131);
     expect(Math.round(at("Prices +3% a year", 10))).toBe(314_652);
+    expect(Math.round(at("Prices +6.81% a year, as in the past 10 years (FHFA)", 10))).toBe(452_648);
   });
 
-  it("marks where the cap ends (2.22 years flat, 2.65 at +3%) and shows the ownership split", () => {
-    expect(chart.capEnds.map((item) => item.text)).toEqual(["Cap ends after 2.22 years", "Cap ends after 2.65 years"]);
+  it("marks where the cap ends (2.22 years flat, 2.65 at +3%, 3.48 at the past pace) and shows the ownership split", () => {
+    expect(chart.capEnds.map((item) => item.text)).toEqual(["Cap ends after 2.22 years", "Cap ends after 2.65 years", "Cap ends after 3.48 years"]);
     expect(chart.share.investorsText).toBe("Investors: 23.41% of the home's value at settlement");
     expect(chart.share.ownerText).toBe("You keep 76.59%");
-    expect(chart.maxUsd).toBeCloseTo(314_652, 0);
+    expect(chart.maxUsd).toBeCloseTo(452_648, 0);
   });
 
   it("puts the CFPB's finding next to the HEI's 20% a year cap, for scale", () => {

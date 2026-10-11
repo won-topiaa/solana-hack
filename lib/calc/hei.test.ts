@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { grossInvestment, heiTerms } from "./hei";
+import { grossInvestment, heiTerms, maxHeiNetCashUsd, type HeiInput } from "./hei";
 import { HOME_EXAMPLE } from "./test-fixtures";
 
 // Expected values: CLAUDE.md §8.5, real estate table.
@@ -44,5 +44,45 @@ describe("heiTerms: limits", () => {
   it("rejects an impossible input instead of returning a number", () => {
     expect(() => heiTerms({ ...HOME_EXAMPLE, homeValueUsd: 0 })).toThrow(RangeError);
     expect(() => heiTerms({ ...HOME_EXAMPLE, feeRate: 1 })).toThrow(RangeError);
+  });
+});
+
+// Expected values: CLAUDE.md §8.5, "most cash an HEI can pay".
+describe("maxHeiNetCashUsd: the most cash an HEI on a home can pay", () => {
+  // The §8.5 pricing; the function finds the cash itself.
+  const pricing: Omit<HeiInput, "netCashUsd"> = HOME_EXAMPLE;
+
+  it("stops at the 24.99% cap: $240,153 on a $1,000,000 home", () => {
+    expect(maxHeiNetCashUsd(pricing)).toBe(240_153);
+    expect(heiTerms({ ...pricing, netCashUsd: 240_153 }).eligible).toBe(true);
+    expect(heiTerms({ ...pricing, netCashUsd: 240_154 }).eligible).toBe(false);
+  });
+
+  it("gives $56,436 on a $235,000 home with a $56,302 mortgage (the cap binds)", () => {
+    expect(maxHeiNetCashUsd({ ...pricing, homeValueUsd: 235_000 }, 56_302)).toBe(56_436);
+  });
+
+  it("is limited by the mortgage when the investors' claim would not fit behind it", () => {
+    // $300,000 home, $250,000 mortgage: G <= $50,000 x 2/3; the $2,000 minimum fee applies.
+    const home = { ...pricing, homeValueUsd: 300_000 };
+    expect(maxHeiNetCashUsd(home, 250_000)).toBe(31_333);
+    const claim = (cash: number) => heiTerms({ ...home, netCashUsd: cash }).shareOfFutureValue * 300_000;
+    expect(250_000 + claim(31_333)).toBeLessThanOrEqual(300_000);
+    expect(250_000 + claim(31_334)).toBeGreaterThan(300_000);
+  });
+
+  it("steps down a dollar when rounding the token supply tips the claim past the home's value", () => {
+    // $2,050,000 home, $1,300,000 mortgage: the formula gives $480,500, whose rounded supply is a few dollars too many.
+    const home = { ...pricing, homeValueUsd: 2_050_000 };
+    const cash = maxHeiNetCashUsd(home, 1_300_000);
+    const claim = (amount: number) => heiTerms({ ...home, netCashUsd: amount }).shareOfFutureValue * 2_050_000;
+    expect(cash).toBeLessThan(480_500);
+    expect(1_300_000 + claim(cash)).toBeLessThanOrEqual(2_050_000);
+    expect(1_300_000 + claim(cash + 1)).toBeGreaterThan(2_050_000);
+  });
+
+  it("is 0 when no HEI fits", () => {
+    expect(maxHeiNetCashUsd({ ...pricing, homeValueUsd: 300_000 }, 300_000)).toBe(0);
+    expect(maxHeiNetCashUsd({ ...pricing, homeValueUsd: 300_000 }, 350_000)).toBe(0);
   });
 });

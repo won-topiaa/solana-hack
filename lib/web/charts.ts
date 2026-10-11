@@ -4,9 +4,10 @@
 
 import type { CaseFile } from "../agent/types";
 import { homeValueAfterYears, settle } from "../calc/settlement";
-import { formatPercent, formatUsd, formatYears, pricesText } from "../format";
+import { formatPercent, formatUsd, formatYears } from "../format";
+import { scenarioPricesText } from "../recommend/realEstate";
 import type { HeiTermSheet } from "../recommend/termSheet";
-import type { PathOption, Recommendation } from "../recommend/types";
+import type { PathOption, PriceScenario, Recommendation } from "../recommend/types";
 
 /** One bar: a value, or a range from `low` to `high` (cash from a dealer, an HEI's cost by price scenario). */
 export type ChartBar = {
@@ -83,7 +84,9 @@ export function comparisonChart(rec: Recommendation): ComparisonChart {
     return option.totalCostUsd === undefined ? [] : [bar(option, rec.chosenId, option.totalCostUsd, option.totalCostUsd, formatUsd(option.totalCostUsd))];
   });
   const unpublished = paths.filter((option) => !option.scenarios && option.totalCostUsd === undefined).length;
-  const growths = paths.find((option) => option.scenarios && option.scenarios.length > 1)?.scenarios?.map((scenario) => scenario.growth);
+  // The HEI's bar runs between its cheapest and costliest price scenarios.
+  const heiScenarios = paths.find((option) => option.scenarios && option.scenarios.length > 1)?.scenarios;
+  const byCost = heiScenarios ? [...heiScenarios].sort((a, b) => a.totalCostUsd - b.totalCostUsd) : null;
 
   const panels: BarPanel[] = [{ title: "Cash now", bars: cash, line: { value: goal.cashNeededUsd, text: `Goal ${formatUsd(goal.cashNeededUsd)}` }, note: null }];
   if (monthly.length > 0) {
@@ -97,7 +100,7 @@ export function comparisonChart(rec: Recommendation): ComparisonChart {
   }
   if (costs.length > 0) {
     const notes = [
-      growths ? `HEI: the bar runs from prices that ${pricesText(Math.min(...growths))} to prices that ${pricesText(Math.max(...growths))}.` : null,
+      byCost ? `HEI: the bar runs from prices that ${scenarioPricesText(byCost[0])} to prices that ${scenarioPricesText(byCost[byCost.length - 1])}.` : null,
       unpublished > 0 ? "Watch loans: rates are not published, so no cost is shown." : null,
     ].filter((item): item is string => item !== null);
     panels.push({ title: `Total cost over ${yearsText(years)}`, bars: costs, line: null, note: notes.length > 0 ? notes.join(" ") : null });
@@ -127,8 +130,9 @@ export type HeiChart = {
 /** How many points each curve has across the term. */
 const CURVE_STEPS = 40;
 
-function scenarioName(growth: number): string {
-  return growth === 0 ? "Prices flat" : `Prices ${growth > 0 ? "+" : "-"}${formatPercent(Math.abs(growth) * 100)} a year`;
+function scenarioName({ growth, past }: PriceScenario): string {
+  const rate = growth === 0 ? "Prices flat" : `Prices ${growth > 0 ? "+" : "-"}${formatPercent(Math.abs(growth) * 100)} a year`;
+  return past ? `${rate}, as in the past ${past.years} years (FHFA)` : rate;
 }
 
 /**
@@ -137,7 +141,8 @@ function scenarioName(growth: number): string {
  * The same settle() as the term sheet, at each step.
  */
 export function heiChart(sheet: HeiTermSheet): HeiChart {
-  const growths = [...new Set(sheet.settlementExamples.map((example) => example.growth))];
+  // One curve per growth rate (a past pace equal to a fixed rate would draw the same curve twice).
+  const scenarios = sheet.settlementExamples.filter((example, index, all) => all.findIndex((other) => other.growth === example.growth) === index);
   const steps = Array.from({ length: CURVE_STEPS + 1 }, (_, index) => (sheet.termYears * index) / CURVE_STEPS);
   const deal = {
     grossInvestmentUsd: sheet.grossInvestmentUsd,
@@ -151,7 +156,12 @@ export function heiChart(sheet: HeiTermSheet): HeiChart {
   const capAt = (years: number) => sheet.grossInvestmentUsd * (1 + sheet.investorReturnCapPerYear) ** years;
 
   const series: HeiSeries[] = [
-    ...growths.map((growth) => ({ name: scenarioName(growth), kind: "payout" as const, growth, points: steps.map((years) => ({ years, usd: payoutAt(growth, years) })) })),
+    ...scenarios.map((scenario) => ({
+      name: scenarioName(scenario),
+      kind: "payout" as const,
+      growth: scenario.growth,
+      points: steps.map((years) => ({ years, usd: payoutAt(scenario.growth, years) })),
+    })),
     { name: `Cap: ${formatPercent(sheet.investorReturnCapPerYear * 100)} a year`, kind: "cap", points: steps.map((years) => ({ years, usd: capAt(years) })) },
     { name: `Cash you receive: ${formatUsd(sheet.netCashUsd)}`, kind: "cash", points: [{ years: 0, usd: sheet.netCashUsd }, { years: sheet.termYears, usd: sheet.netCashUsd }] },
   ];

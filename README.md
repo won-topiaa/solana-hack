@@ -135,11 +135,17 @@ $2,000), investor return capped at 20% a year.
 | 2 years | flat | $224,765.87 (cap applies) | 22.41% |
 | 10 years | flat | $234,131 | 4.55% |
 | 10 years | +3% a year | $314,652 | 7.69% |
+| 10 years | as in the past 10 years (FHFA, +6.81% a year) | $452,648 | 11.68% |
 
-The comparison uses two fixed price scenarios (flat and +3% a year). The settlement demo on the
-partner page instead follows the FHFA house price index over the same number of past years
-(+3.41% a year over 2 years and +6.81% a year over 10 years, to 2026-04-01): the 2-year buyback is
-the same, since the cap applies; a 10-year maturity then pays about $452,648 (11.68% a year).
+The comparison shows three price scenarios: flat, +3% a year, and prices moving as in the past 10
+years of the FHFA house price index (+6.81% a year to 2026-04-01). It ranks the HEI by the
+costliest, so an HEI is never chosen on an optimistic guess. The settlement demo on the partner
+page follows the same index over the same number of past years (+3.41% a year over 2 years): the
+2-year buyback pays the capped amount above, and a 10-year maturity pays $452,648.
+
+An HEI can pay at most the cash that keeps G within 24.99% of V and, with a mortgage M, keeps M
+plus the investors' share of the home within V: $240,153 on this home. When a user asks for more,
+the comparison says how much is possible.
 
 That is why the rules send a 2-year borrower to a HELOC (RE-1) and a 10-year borrower with no
 monthly budget to the HEI (RE-2). On-chain, money moves in micro-dollars: each holder gets

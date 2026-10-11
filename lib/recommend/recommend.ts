@@ -8,15 +8,15 @@ import type { CaseFile } from "../agent/types";
 import type { RealEstateAsset, WatchAsset } from "../assets/types";
 import { formatUsd, formatYears } from "../format";
 import { daysBetween } from "../params/dates";
-import { comparisonTerms, getShareRange, heiPricing, watchTerms } from "../params/inputs";
+import { comparisonTerms, getShareRange, heiPastGrowth, heiPricing, watchTerms } from "../params/inputs";
 import { checkParamsFresh } from "../params/staleness";
 import type { Registry } from "../params/types";
 import {
   heiOption,
   helocOption,
   homeEquityLoanOption,
-  pct,
   reverseMortgageOption,
+  scenarioPricesText,
   type HomeInput,
   type RealEstateTerms,
 } from "./realEstate";
@@ -96,6 +96,7 @@ export function realEstateTerms(registry: Registry): RealEstateTerms {
       investorReturnCap: pricing.investorReturnCap,
     },
     heiGrowthScenarios: settings.heiGrowthScenarios,
+    heiPastGrowth: heiPastGrowth(registry),
     heiTermYears: settings.heiTermYears,
     // Context only (a reference value): shown next to the HEI's cost, never used to compute it.
     heiCostBenchmark: registry.params.cfpb_hei_early_growth ? getShareRange(registry, "cfpb_hei_early_growth") : undefined,
@@ -165,7 +166,7 @@ export function recommend(caseFile: CaseFile, registry: Registry, today: string,
       options.push(reverseMortgageOption(homeInput));
       rulesFired.push("RE-3");
     }
-    homeChoice = chooseHomePath(paths, years, budget, settings.helocFirstYears, settings.heiGrowthScenarios, rulesFired, reasons);
+    homeChoice = chooseHomePath(paths, years, budget, settings.helocFirstYears, rulesFired, reasons);
     laneChoices.real_estate = homeChoice?.id ?? null;
   }
 
@@ -258,7 +259,6 @@ function chooseHomePath(
   years: number,
   budget: number | undefined,
   helocFirstYears: number,
-  growthScenarios: number[],
   rulesFired: string[],
   reasons: string[],
 ): PathOption | null {
@@ -284,9 +284,11 @@ function chooseHomePath(
   const candidates = [paths.heloc, paths.loan, paths.hei].filter((option) => option.suitable);
   if (candidates.length === 0) return null;
   const pick = cheapest(candidates);
+  // The HEI is ranked by its costliest scenario, so the reason says which one that was.
+  const costliest = paths.hei.scenarios?.reduce((a, b) => (b.totalCostUsd > a.totalCostUsd ? b : a));
   reasons.push(
-    `Lowest total cost over ${formatYears(years)} among the paths that fit: about ${formatUsd(pick.totalCostUsd ?? 0)} ` +
-      `(the HEI is counted as if prices rise ${pct(Math.max(...growthScenarios))} a year).`,
+    `Lowest total cost over ${formatYears(years)} among the paths that fit: about ${formatUsd(pick.totalCostUsd ?? 0)}` +
+      (costliest ? ` (the HEI is counted as if prices ${scenarioPricesText(costliest)}).` : "."),
   );
   return pick;
 }

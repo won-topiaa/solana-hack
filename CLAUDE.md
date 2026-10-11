@@ -146,6 +146,7 @@ Inputs: home value `V`, net cash `C`, discount `d`, fee rate `phi`, cap `cap`.
 - Unit = 1/1,000,000 of home value; unit value today `u = V / 1e6`; token price `p = u * (1 - d)`.
 - Token supply `N = round(G / p)`; share of future value `s = N / 1e6`.
 - Eligibility: `G <= hei_max_investment_pct_of_value * V`.
+- Most cash (`maxHeiNetCashUsd`, owner 2026-10-11): the largest whole-dollar `C` that is eligible and, when the mortgage `M` is known, keeps `M + s * V <= V`. Shown when the user asks for more than an HEI can pay.
 
 ### 8.2 Settlement (years `t`, home value at settlement `Vt`)
 - Uncapped payout `P0 = N * Vt / 1e6`; capped payout `P = min(P0, G * (1 + cap)^t)`.
@@ -184,6 +185,8 @@ Real estate (`V=1,000,000`, `C=150,000`, `d=1/3`, `phi=0.039`, `cap=0.20`):
 | payout t=10, +3%/yr | 314,652; owner cost 7.7%/yr |
 | cap binds until | 2.22 yrs (flat), 2.65 yrs (+3%/yr) |
 | HELOC interest-only monthly at 7.09% on 150,000 | 886 |
+| most cash, no mortgage | 240,153 |
+| most cash, `V=235,000`, `M=56,302` / `V=1,000,000`, `M=800,000` | 56,436 / 128,133 |
 
 Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 
@@ -199,7 +202,7 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 - HELOC: interest-only payment (§8.5); cost = interest over `t`. Home equity loan: equal monthly payments over `t`:
   `pay = P*r/(1-(1+r)^-n)`, `r = rate/12`, `n = 12t`; cost = all payments − `P`.
 - If (mortgage + new loan) / home value > `heloc_avg_rate_cltv_basis` (70%): warn that the rate may be higher (no block).
-- HEI: settle at `t` (at most the longest term) for each growth in `hei_scenario_growth_rates` (0%, +3%/yr); rank by the costliest scenario.
+- HEI: settle at `t` (at most the longest term) for each growth in `hei_scenario_growth_rates` (0%, +3%/yr) and for prices moving as in the past `hei_scenario_history_years` (10) years of the FHFA index (`home_price_growth_10y`; owner, 2026-10-11, after the simulation showed +6.81%/yr); rank by the costliest scenario.
 - Watch loan: no cost number (rates not published). Refinance: not compared. Reverse mortgage: information only, 62+ (RE-3).
 - A path is suitable when it reaches the goal, does not sell a kept asset, its monthly payment fits the budget, and (HEI) it is eligible.
 - Watch rules: kept and `t` ≤ longest watch-loan term (180 days) → loan (W-3); not kept and needed within `watch_dealer_urgent_days` (1) → dealer (W-1); otherwise not kept → marketplace (W-2). Plan: loans first, then sales from the largest, until the goal.
@@ -215,7 +218,7 @@ Watches (need 30,000; A sport steel 25,000; B dress gold 15,000):
 | Home equity loan 150,000 at 7.42%, 2 years | 6,744.48/month |
 | CLTV 400,000 + 150,000 on 1,000,000 | 55% |
 | Persona A (watch; 2 watches, 30,000 by tomorrow, keep sport watch) | loan on A + dealer sale of B, 29,250–32,250; rules W-3, W-1; B must bring ≥ 75% |
-| Persona B (home; 150,000, 10 years, budget 0) | HEI; rule RE-2; pay 234,131 flat (4.55%/yr) or 314,652 at +3%/yr (7.69%/yr) |
+| Persona B (home; 150,000, 10 years, budget 0) | HEI; rule RE-2; pay 234,131 flat (4.55%/yr), 314,652 at +3%/yr (7.69%/yr) or 452,648 as in the past 10 years (+6.8145%/yr; 11.68%/yr); ranked at 302,648 |
 | Persona B2 (home; 150,000, 2 years, budget 1,000) | HELOC; rule RE-1; interest 21,270; home equity loan 6,744/month is over budget |
 | Persona C (unsure; home + 2 watches, 40,000, 3 months, budget 500, keeps home and A) | HELOC (the home covers it alone; the watches fall short); rules RE-1, W-3, W-2; no combination |
 | Persona D (unsure; home + 2 watches, 30,000 within a month, budget 500, keeps nothing) | both work → the user chooses: HELOC, or sell both watches on a marketplace; rules RE-1, W-2 |

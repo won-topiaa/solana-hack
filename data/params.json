@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-10-03.1",
+  "registry_version": "2026-10-11.1",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
@@ -30,6 +30,10 @@
     {
       "version": "2026-10-03.1",
       "note": "Added cfpb_hei_early_growth (reference, CFPB 2025): shown next to the HEI's cost for scale; never used in a calculation."
+    },
+    {
+      "version": "2026-10-11.1",
+      "note": "Added hei_scenario_history_years (design, owner 2026-10-11): the HEI comparison also settles at the FHFA index's yearly growth over the past 10 years (home_price_growth_10y), and ranks by the costliest scenario. home_price_growth_10y's source note says so. No values changed."
     }
   ],
   "rules": {
@@ -297,6 +301,16 @@
       "checked_at": null,
       "valid_days": null
     },
+    "hei_scenario_history_years": {
+      "value": 10,
+      "unit": "years of FHFA house price index history",
+      "kind": "design",
+      "source": "Owner decision 2026-10-11: besides the fixed rates in hei_scenario_growth_rates, HEI costs are also shown for home prices moving as in the past 10 years of the FHFA index (registry home_price_growth_10y), because that pace was above +3% a year. The costliest scenario ranks the HEI.",
+      "source_url": null,
+      "as_of": "2026-10-11",
+      "checked_at": null,
+      "valid_days": null
+    },
     "watch_dealer_urgent_days": {
       "value": 1,
       "unit": "days until the cash is needed",
@@ -321,7 +335,7 @@
       "value": 0.068145,
       "unit": "yearly home price growth",
       "kind": "market",
-      "source": "FHFA All-Transactions House Price Index for the United States (FRED USSTHPI, quarterly): yearly growth over the 10 years to as_of, computed by scripts/refresh-params.ts. Used for the settlement demo's simulated appraisal.",
+      "source": "FHFA All-Transactions House Price Index for the United States (FRED USSTHPI, quarterly): yearly growth over the 10 years to as_of, computed by scripts/refresh-params.ts. Used for the settlement demo's simulated appraisal and, through hei_scenario_history_years, as an HEI price scenario in the comparison.",
       "source_url": "https://fred.stlouisfed.org/series/USSTHPI",
       "as_of": "2026-04-01",
       "checked_at": "2026-10-02",
