@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-10-11.1",
+  "registry_version": "2026-10-11.3",
   "created_at": "2026-10-01T16:30:00+09:00",
   "status": "initial_import_needs_owner_review",
   "changelog": [
@@ -34,6 +34,14 @@
     {
       "version": "2026-10-11.1",
       "note": "Added hei_scenario_history_years (design, owner 2026-10-11): the HEI comparison also settles at the FHFA index's yearly growth over the past 10 years (home_price_growth_10y), and ranks by the costliest scenario. home_price_growth_10y's source note says so. No values changed."
+    },
+    {
+      "version": "2026-10-11.2",
+      "note": "refresh-params: sofr 0.0387 -> 0.0387 (as_of 2026-10-01 -> 2026-10-08); mortgage_30y_fixed_avg 0.0728 -> 0.074 (as_of 2026-10-01 -> 2026-10-08); mortgage_15y_fixed_avg 0.066 -> 0.0673 (as_of 2026-10-01 -> 2026-10-08)"
+    },
+    {
+      "version": "2026-10-11.3",
+      "note": "Weekly re-check before submission (owner request): heloc_avg_rate 0.0709 -> 0.0754 and home_equity_loan_avg_rate 0.0742 -> 0.075 (Curinos via Yahoo Finance, 2026-10-09; same 780 credit score / CLTV under 70% basis). Product values re-checked 2026-10-11, all unchanged: Point fee 3.9% min $2,000 (now cited from Point's help center), reverse mortgage age 62 (CFPB), dealer offers 70-90% (dealer guide), Chrono24 6.5% (official FAQ), watch loan LTV 60-80% and 30-180 days (Borro guide)."
     }
   ],
   "rules": {
@@ -49,43 +57,43 @@
   },
   "params": {
     "mortgage_30y_fixed_avg": {
-      "value": 0.0728,
+      "value": 0.074,
       "unit": "rate/yr",
       "kind": "market",
       "source": "Freddie Mac PMMS (published Thursdays 12pm ET; history downloadable as .xlsx)",
       "source_url": "https://www.globenewswire.com/news-release/2026/09/24/3368592/0/en/mortgage-rates-average-7-03.html",
-      "as_of": "2026-10-01",
-      "checked_at": "2026-10-02",
+      "as_of": "2026-10-08",
+      "checked_at": "2026-10-11",
       "valid_days": 7
     },
     "mortgage_15y_fixed_avg": {
-      "value": 0.066,
+      "value": 0.0673,
       "unit": "rate/yr",
       "kind": "market",
       "source": "Freddie Mac PMMS",
       "source_url": "https://www.globenewswire.com/news-release/2026/09/24/3368592/0/en/mortgage-rates-average-7-03.html",
-      "as_of": "2026-10-01",
-      "checked_at": "2026-10-02",
+      "as_of": "2026-10-08",
+      "checked_at": "2026-10-11",
       "valid_days": 7
     },
     "heloc_avg_rate": {
-      "value": 0.0709,
+      "value": 0.0754,
       "unit": "rate/yr (variable)",
       "kind": "market",
       "source": "Curinos via Yahoo Finance; applies to credit score >= 780 and CLTV < 70%. No public API verified: entered manually weekly.",
-      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-september-25-2026-understanding-how-equity-rates-work-matters-100000210.html",
-      "as_of": "2026-09-25",
-      "checked_at": null,
+      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-october-9-2026-understanding-how-equity-rates-work-matters-100049853.html",
+      "as_of": "2026-10-09",
+      "checked_at": "2026-10-11",
       "valid_days": 7
     },
     "home_equity_loan_avg_rate": {
-      "value": 0.0742,
+      "value": 0.075,
       "unit": "rate/yr (fixed)",
       "kind": "market",
       "source": "Curinos via Yahoo Finance; same conditions as heloc_avg_rate",
-      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-september-25-2026-understanding-how-equity-rates-work-matters-100000210.html",
-      "as_of": "2026-09-25",
-      "checked_at": null,
+      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-october-9-2026-understanding-how-equity-rates-work-matters-100049853.html",
+      "as_of": "2026-10-09",
+      "checked_at": "2026-10-11",
       "valid_days": 7
     },
     "sofr": {
@@ -94,8 +102,8 @@
       "kind": "market",
       "source": "FRED series SOFR (API: fred/series/observations, JSON, API key)",
       "source_url": "https://fred.stlouisfed.org/series/SOFR",
-      "as_of": "2026-10-01",
-      "checked_at": "2026-10-02",
+      "as_of": "2026-10-08",
+      "checked_at": "2026-10-11",
       "valid_days": 3
     },
     "hei_investor_discount": {
@@ -112,20 +120,20 @@
       "value": 0.039,
       "unit": "fraction of gross investment",
       "kind": "product",
-      "source": "Point HEI processing fee: up to 3.9%, minimum $2,000 (plus third-party closing costs)",
-      "source_url": "https://point.com/hei",
+      "source": "Point help center: a 3.9% processing fee (subject to a $2,000 minimum), plus third-party closing costs (page last updated 2026-06-25)",
+      "source_url": "https://help.point.com/article/38-point-service-fees",
       "as_of": "2026-10-01",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 30
     },
     "hei_fee_min_usd": {
       "value": 2000,
       "unit": "USD",
       "kind": "product",
-      "source": "Point HEI processing fee minimum",
-      "source_url": "https://point.com/hei",
+      "source": "Point help center: processing fee minimum $2,000 (page last updated 2026-06-25)",
+      "source_url": "https://help.point.com/article/38-point-service-fees",
       "as_of": "2026-10-01",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 30
     },
     "hei_max_investment_pct_of_value": {
@@ -179,7 +187,7 @@
       "source": "CFPB: HECM reverse mortgage is only for homeowners 62 and older",
       "source_url": "https://www.consumerfinance.gov/ask-cfpb/what-is-a-reverse-mortgage-en-224/",
       "as_of": "2026-10-01",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 365
     },
     "watch_dealer_offer_range": {
@@ -192,17 +200,17 @@
       "source": "Dealer guide (2026): dealers pay roughly 10-30% less than market value; same day locally, next day if shipped",
       "source_url": "https://nwtimepieces.com/blogs/resources/where-to-sell-your-rolex",
       "as_of": "2026-10-01",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 30
     },
     "chrono24_private_seller_fee": {
       "value": 0.065,
       "unit": "fraction of sale price",
       "kind": "product",
-      "source": "Chrono24 FAQ: 6.5% commission after sale; listing free; escrow checkout",
+      "source": "Chrono24 FAQ: listing is free; once the watch is sold, a 6.5% commission fee, retained at payout from escrow (re-checked 2026-10-11)",
       "source_url": "https://www.chrono24.com/info/faqs.htm",
       "as_of": "2026-10-01",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 30
     },
     "watch_loan_ltv": {
@@ -216,7 +224,7 @@
       "source": "Borro guide (lender self-reported, 2026-03-19): LTV 60-80%; terms 30-180 days; lender holds the watch; rates not disclosed",
       "source_url": "https://borro.com/rolex-collateral-loan-national-guide/",
       "as_of": "2026-03-19",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 30
     },
     "watch_loan_term_days": {
@@ -229,7 +237,7 @@
       "source": "Borro guide (2026-03-19); extensions common",
       "source_url": "https://borro.com/rolex-collateral-loan-national-guide/",
       "as_of": "2026-03-19",
-      "checked_at": "2026-10-01",
+      "checked_at": "2026-10-11",
       "valid_days": 30
     },
     "watch_full_kit_uplift": {
@@ -273,9 +281,9 @@
       "unit": "combined loan-to-value",
       "kind": "market",
       "source": "Curinos via Yahoo Finance: the average HELOC and home equity loan rates assume combined loan-to-value under 70% and a credit score of 780 or more. Update together with heloc_avg_rate.",
-      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-september-25-2026-understanding-how-equity-rates-work-matters-100000210.html",
-      "as_of": "2026-09-25",
-      "checked_at": null,
+      "source_url": "https://finance.yahoo.com/personal-finance/mortgages/article/heloc-and-home-equity-loan-rates-today-friday-october-9-2026-understanding-how-equity-rates-work-matters-100049853.html",
+      "as_of": "2026-10-09",
+      "checked_at": "2026-10-11",
       "valid_days": 7
     },
     "comparison_default_horizon_years": {
